@@ -1,0 +1,23 @@
+# Dependencias y compilaciones
+node_modules/
+dist/
+dist-electron/
+dist-renderer/
+dist-release/
+# Respaldos y archivos pesados
+assets_backup/
+*.bak
+*.rar
+*.zip
+*.7z
+*.tar.gz
+build_errors.txt
+# Base de datos local y temporales
+*.sqlite
+*.sqlite-journal
+*.log
+.DS_Store
+Thumbs.db
+# Configuración IDE y agentes
+.gemini/
+.agents/
