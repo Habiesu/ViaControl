@@ -9,6 +9,7 @@ const IERView = lazy(() => import('./views/IERView.jsx'));
 const SaldosPropietariosView = lazy(() => import('./views/SaldosPropietariosView.jsx'));
 const RutasView = lazy(() => import('./views/RutasView.jsx'));
 const GastosExtraView = lazy(() => import('./views/GastosExtraView.jsx'));
+const AjustesView = lazy(() => import('./views/AjustesView.jsx'));
 import UpdateNotifier from './components/UpdateNotifier.jsx';
 
 const { ipcRenderer } = window.require('electron');
@@ -23,6 +24,7 @@ const TABS = {
   'propietarios':         { label: 'Propietarios, Choferes y Gandolas',          breadcrumb: 'Gestión',        icon: 'local_shipping',        nav: 'Propietarios y Choferes' },
   'rutas':                { label: 'Catálogo de Tarifas y Rutas Dinámicas',      breadcrumb: 'Catálogo',       icon: 'explore',               nav: 'Rutas y Tarifas' },
   'gastos_extra':         { label: 'Gastos de Mantenimiento, Taller y Flota',    breadcrumb: 'Mantenimiento',  icon: 'build',                 nav: 'Gastos de Taller y Flota' },
+  'ajustes':              { label: 'Ajustes del Sistema',                        breadcrumb: 'Sistema',        icon: 'settings',              nav: 'Ajustes' },
 };
 
 const NAV_GROUPS = [
@@ -106,6 +108,14 @@ export default function App() {
         </nav>
 
         <div className="sidebar-footer">
+          <div
+            className={`nav-item ajustes-nav-btn ${currentTab === 'ajustes' ? 'active' : ''}`}
+            onClick={() => setCurrentTab('ajustes')}
+            style={{ marginBottom: '8px' }}
+          >
+            <span className="material-symbols-outlined">settings</span>
+            <span>Ajustes</span>
+          </div>
           <div className="status-chip">
             <span className="status-beacon" />
             <span>Sistema En Línea</span>
@@ -179,6 +189,7 @@ export default function App() {
             )}
             {currentTab === 'rutas' && <RutasView {...viewProps} onActualizar={loadCatalogos} />}
             {currentTab === 'gastos_extra' && <GastosExtraView {...viewProps} />}
+            {currentTab === 'ajustes' && <AjustesView {...viewProps} />}
           </Suspense>
         </div>
       </main>
