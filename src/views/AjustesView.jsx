@@ -7,6 +7,12 @@ export default function AjustesView({ showToast }) {
   const [version, setVersion] = useState('');
   const [abriendo, setAbriendo] = useState(false);
 
+  // Estados del actualizador
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState(null); // 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error'
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+
   useEffect(() => {
     ipcRenderer.invoke('ajustes:obtenerRutaDatos').then(res => {
       if (res.ok) setRutaDB(res.ruta);
@@ -14,6 +20,36 @@ export default function AjustesView({ showToast }) {
     ipcRenderer.invoke('ajustes:obtenerVersion').then(res => {
       if (res.ok) setVersion(res.version);
     });
+
+    const handleUpdaterStatus = (event, data) => {
+      if (!data) return;
+      setUpdateStatus(data.status);
+
+      if (data.status === 'checking') {
+        setCheckingUpdate(true);
+      } else if (data.status === 'available') {
+        setCheckingUpdate(false);
+        setUpdateInfo(data);
+      } else if (data.status === 'downloading') {
+        setCheckingUpdate(false);
+        setDownloadProgress(data.percent || 0);
+      } else if (data.status === 'downloaded') {
+        setCheckingUpdate(false);
+        setUpdateInfo(data);
+      } else if (data.status === 'up-to-date') {
+        setCheckingUpdate(false);
+        setUpdateInfo(data);
+      } else if (data.status === 'error') {
+        setCheckingUpdate(false);
+        setUpdateInfo(data);
+      }
+    };
+
+    ipcRenderer.on('updater:status', handleUpdaterStatus);
+
+    return () => {
+      ipcRenderer.removeListener('updater:status', handleUpdaterStatus);
+    };
   }, []);
 
   const abrirCarpeta = async () => {
@@ -24,8 +60,141 @@ export default function AjustesView({ showToast }) {
     else showToast('Error al abrir la carpeta: ' + res.error, 'error');
   };
 
+  const comprobarActualizaciones = async () => {
+    setCheckingUpdate(true);
+    setUpdateStatus('checking');
+    try {
+      const res = await ipcRenderer.invoke('updater:check');
+      if (!res.ok) {
+        setCheckingUpdate(false);
+        setUpdateStatus('error');
+        setUpdateInfo({ error: res.message || res.error || 'No se pudo contactar al servidor de actualizaciones' });
+      }
+    } catch (err) {
+      setCheckingUpdate(false);
+      setUpdateStatus('error');
+      setUpdateInfo({ error: err.message });
+    }
+  };
+
+  const reiniciarEInstalar = () => {
+    ipcRenderer.invoke('updater:quitAndInstall');
+  };
+
   return (
     <div className="ajustes-view">
+
+      {/* ── SECCIÓN: Actualizaciones del Sistema ── */}
+      <section className="ajustes-section">
+        <div className="ajustes-section-header">
+          <span className="material-symbols-outlined">system_update</span>
+          <div>
+            <h2>Actualizaciones del Sistema</h2>
+            <p>Comprueba si hay nuevas versiones de ViaControl y actualiza automáticamente.</p>
+          </div>
+        </div>
+
+        <div className="ajustes-card">
+          <div className="ajustes-row">
+            <div className="ajustes-row-info">
+              <span className="ajustes-row-label">
+                <span className="material-symbols-outlined">verified</span>
+                Estado de la Aplicación
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--on-surface)' }}>
+                  Versión actual: <span className="mono" style={{ color: 'var(--primary)' }}>v{version || '1.1.1'}</span>
+                </span>
+
+                {updateStatus === 'up-to-date' && (
+                  <span className="badge badge-emerald">
+                    <span className="material-symbols-outlined" style={{ fontSize: '13px', marginRight: '3px' }}>check_circle</span>
+                    Al día
+                  </span>
+                )}
+                {updateStatus === 'downloaded' && (
+                  <span className="badge badge-amber">
+                    <span className="material-symbols-outlined" style={{ fontSize: '13px', marginRight: '3px' }}>download_done</span>
+                    Actualización lista
+                  </span>
+                )}
+                {updateStatus === 'error' && (
+                  <span className="badge badge-rose">
+                    <span className="material-symbols-outlined" style={{ fontSize: '13px', marginRight: '3px' }}>warning</span>
+                    Aviso
+                  </span>
+                )}
+              </div>
+
+              {/* Mensajes de estado detallados */}
+              {updateStatus === 'checking' && (
+                <span style={{ fontSize: '12px', color: 'var(--on-surface-variant)' }}>
+                  Buscando actualizaciones en GitHub...
+                </span>
+              )}
+              {updateStatus === 'up-to-date' && (
+                <span style={{ fontSize: '12px', color: 'var(--primary)' }}>
+                  Tienes la versión más reciente instalada.
+                </span>
+              )}
+              {updateStatus === 'downloading' && (
+                <div style={{ marginTop: '6px', width: '220px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                    <span>Descargando...</span>
+                    <span className="mono">{downloadProgress}%</span>
+                  </div>
+                  <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ width: `${downloadProgress}%`, height: '100%', background: 'var(--primary)', transition: 'width 0.2s' }}></div>
+                  </div>
+                </div>
+              )}
+              {updateStatus === 'downloaded' && (
+                <span style={{ fontSize: '12px', color: 'var(--secondary)' }}>
+                  ¡Versión {updateInfo?.version ? `v${updateInfo.version}` : ''} descargada! Reinicia para aplicar.
+                </span>
+              )}
+              {updateStatus === 'error' && (
+                <span style={{ fontSize: '12px', color: '#f87171' }}>
+                  {updateInfo?.error || 'No se pudo buscar actualizaciones'}
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              {updateStatus === 'downloaded' ? (
+                <button
+                  id="btn-reiniciar-update"
+                  className="btn btn-primary"
+                  onClick={reiniciarEInstalar}
+                  style={{ background: 'var(--primary)', color: '#0f172a', fontWeight: 700 }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>restart_alt</span>
+                  Reiniciar e Instalar
+                </button>
+              ) : (
+                <button
+                  id="btn-comprobar-update"
+                  className="btn btn-secondary"
+                  onClick={comprobarActualizaciones}
+                  disabled={checkingUpdate}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                    {checkingUpdate ? 'sync' : 'refresh'}
+                  </span>
+                  {checkingUpdate ? 'Buscando…' : 'Buscar actualizaciones'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="ajustes-hint">
+            <span className="material-symbols-outlined">cloud_sync</span>
+            <span>
+              ViaControl revisa automáticamente al iniciar si existe una nueva versión en GitHub Releases y la descarga en segundo plano.
+            </span>
+          </div>
+        </div>
+      </section>
 
       {/* ── SECCIÓN: Base de datos ── */}
       <section className="ajustes-section">
