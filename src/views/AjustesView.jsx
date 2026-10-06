@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../components/AuthGuard.jsx';
 
 const { ipcRenderer } = window.require('electron');
 
 export default function AjustesView({ showToast }) {
+  const { user, logout, syncStatus, triggerSync } = useAuth();
   const [rutaDB, setRutaDB] = useState('');
   const [version, setVersion] = useState('');
   const [abriendo, setAbriendo] = useState(false);
@@ -81,8 +83,87 @@ export default function AjustesView({ showToast }) {
     ipcRenderer.invoke('updater:quitAndInstall');
   };
 
+  const handleManualSync = async () => {
+    await triggerSync();
+    showToast('Sincronización con la nube ejecutada');
+  };
+
   return (
     <div className="ajustes-view">
+
+      {/* ── SECCIÓN: Cuenta y Sincronización en la Nube ── */}
+      <section className="ajustes-section">
+        <div className="ajustes-section-header">
+          <span className="material-symbols-outlined" style={{ color: '#3b82f6' }}>cloud_sync</span>
+          <div>
+            <h2>Cuenta y Sincronización en la Nube</h2>
+            <p>Gestión de tu cuenta de usuario y estado de sincronización entre equipos.</p>
+          </div>
+        </div>
+
+        <div className="ajustes-card">
+          <div className="ajustes-row">
+            <div className="ajustes-row-info">
+              <span className="ajustes-row-label">
+                <span className="material-symbols-outlined">account_circle</span>
+                Sesión Activa
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--on-surface)' }}>
+                  {user?.email || 'Usuario conectado'}
+                </span>
+                <span className="badge badge-emerald">
+                  <span className="material-symbols-outlined" style={{ fontSize: '13px', marginRight: '3px' }}>verified_user</span>
+                  Conectado
+                </span>
+              </div>
+              <span style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginTop: '4px' }}>
+                {syncStatus.lastSync
+                  ? `Última sincronización: ${new Date(syncStatus.lastSync).toLocaleString()}`
+                  : 'Sincronización pendiente'}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={handleManualSync}
+                disabled={syncStatus.syncing}
+                title="Sincronizar cambios locales y remotos"
+              >
+                <span className={`material-symbols-outlined ${syncStatus.syncing ? 'spinning' : ''}`} style={{ fontSize: '18px' }}>
+                  sync
+                </span>
+                {syncStatus.syncing ? 'Sincronizando…' : 'Sincronizar Ahora'}
+              </button>
+
+              <button
+                className="btn btn-danger"
+                onClick={() => {
+                  if (window.confirm('¿Seguro que deseas cerrar la sesión en esta computadora?')) {
+                    logout();
+                  }
+                }}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: '#ef4444',
+                  border: '1px solid rgba(239, 68, 68, 0.3)'
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>logout</span>
+                Cerrar Sesión
+              </button>
+            </div>
+          </div>
+
+          <div className="ajustes-hint">
+            <span className="material-symbols-outlined">devices</span>
+            <span>
+              Cualquier cambio que realices en esta computadora se subirá a la nube y se reflejará automáticamente en otras computadoras al iniciar sesión con la misma cuenta.
+            </span>
+          </div>
+        </div>
+      </section>
 
       {/* ── SECCIÓN: Actualizaciones del Sistema ── */}
       <section className="ajustes-section">
@@ -103,7 +184,7 @@ export default function AjustesView({ showToast }) {
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
                 <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--on-surface)' }}>
-                  Versión actual: <span className="mono" style={{ color: 'var(--primary)' }}>v{version || '1.1.1'}</span>
+                  Versión actual: <span className="mono" style={{ color: 'var(--primary)' }}>v{version || '1.3.0'}</span>
                 </span>
 
                 {updateStatus === 'up-to-date' && (
@@ -129,7 +210,7 @@ export default function AjustesView({ showToast }) {
               {/* Mensajes de estado detallados */}
               {updateStatus === 'checking' && (
                 <span style={{ fontSize: '12px', color: 'var(--on-surface-variant)' }}>
-                  Buscando actualizaciones en GitHub...
+                  Buscando actualizaciones en el servidor...
                 </span>
               )}
               {updateStatus === 'up-to-date' && (
@@ -190,7 +271,7 @@ export default function AjustesView({ showToast }) {
           <div className="ajustes-hint">
             <span className="material-symbols-outlined">cloud_sync</span>
             <span>
-              ViaControl revisa automáticamente al iniciar si existe una nueva versión en GitHub Releases y la descarga en segundo plano.
+              ViaControl revisa automáticamente al iniciar si existe una nueva versión disponible y la descarga en segundo plano.
             </span>
           </div>
         </div>
@@ -202,7 +283,7 @@ export default function AjustesView({ showToast }) {
           <span className="material-symbols-outlined">storage</span>
           <div>
             <h2>Base de Datos Local</h2>
-            <p>Gestiona el archivo SQLite donde se almacenan todos los datos de ViaControl.</p>
+            <p>Gestiona el archivo de almacenamiento local donde se guardan tus registros de ViaControl.</p>
           </div>
         </div>
 
@@ -231,8 +312,7 @@ export default function AjustesView({ showToast }) {
           <div className="ajustes-hint">
             <span className="material-symbols-outlined">info</span>
             <span>
-              Para hacer una copia de seguridad, copia el archivo <code>gandolas_db.sqlite</code> a otro lugar.
-              Para restaurar, reemplaza ese mismo archivo con tu copia.
+              Tus datos se guardan de forma segura en tu equipo y se sincronizan automáticamente con la nube. Puedes respaldar tu archivo de datos cuando lo desees.
             </span>
           </div>
         </div>
@@ -252,19 +332,19 @@ export default function AjustesView({ showToast }) {
           <div className="ajustes-about-grid">
             <div className="ajustes-about-item">
               <span className="ajustes-about-label">Versión</span>
-              <span className="ajustes-about-value">v{version || '–'}</span>
+              <span className="ajustes-about-value">v{version || '1.3.0'}</span>
             </div>
             <div className="ajustes-about-item">
-              <span className="ajustes-about-label">Motor</span>
-              <span className="ajustes-about-value">Electron + React 19</span>
+              <span className="ajustes-about-label">Plataforma</span>
+              <span className="ajustes-about-value">ViaControl Terminal Core</span>
             </div>
             <div className="ajustes-about-item">
-              <span className="ajustes-about-label">Base de datos</span>
-              <span className="ajustes-about-value">SQLite 3 (local)</span>
+              <span className="ajustes-about-label">Almacenamiento</span>
+              <span className="ajustes-about-value">Local Seguro</span>
             </div>
             <div className="ajustes-about-item">
-              <span className="ajustes-about-label">Producto</span>
-              <span className="ajustes-about-value">ViaControl — Gestión de Flota</span>
+              <span className="ajustes-about-label">Sincronización</span>
+              <span className="ajustes-about-value">Nube Automática</span>
             </div>
           </div>
         </div>

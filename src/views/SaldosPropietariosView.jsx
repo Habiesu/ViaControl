@@ -304,8 +304,14 @@ function SeccionAporteDirecto({ isOpen, onClose, initialAgenteId, agentes, onGua
     try {
       const res = await ipcRenderer.invoke('saldos:guardarAporte', formData);
       if (res && res.ok) {
-        if (mostrarToast) mostrarToast(res.mensaje || 'Entrega registrada exitosamente', 'success');
-        onClose();
+        if (mostrarToast) mostrarToast(res.mensaje || '¡Entrega registrada exitosamente! Puede continuar registrando.', 'success');
+        setFormData(prev => ({
+          ...prev,
+          monto: '',
+          concepto: 'Entrega de Fondos',
+          referencia: '',
+          notas: ''
+        }));
         onGuardado();
       } else {
         if (mostrarToast) mostrarToast(res?.error || 'Error al guardar entrega', 'error');
@@ -548,8 +554,15 @@ function SeccionGastoDirecto({ isOpen, onClose, initialAgenteId, agentes, catalo
 
       const res = await ipcRenderer.invoke('gastos-extra:guardar', payload);
       if (res && res.ok) {
-        if (mostrarToast) mostrarToast('Gasto / deducción registrada exitosamente', 'success');
-        onClose();
+        if (mostrarToast) mostrarToast('¡Gasto registrado exitosamente! Puede continuar registrando.', 'success');
+        setFormData(prev => ({
+          ...prev,
+          id_propietario: '',
+          id_gandola: '',
+          id_chofer: '',
+          monto: '',
+          descripcion: ''
+        }));
         onGuardado();
       } else {
         if (mostrarToast) mostrarToast(res?.error || 'Error al registrar el gasto', 'error');
@@ -888,8 +901,6 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
     const rowsResumen = resumen.map(r => `
       <tr>
         <td><strong>${r.nombre}</strong></td>
-        <td>${r.propietarios_nombres}</td>
-        <td style="text-align:center">${r.total_gandolas} gandolas / ${r.total_choferes} choferes</td>
         <td style="text-align:right; color:#15803d; font-weight:600">${formatUSD(r.total_entregado)}</td>
         <td style="text-align:right; color:#dc2626; font-weight:600">${formatUSD(r.total_gastos)}</td>
         <td style="text-align:right; font-weight:700; color:${r.saldo_actual >= 0 ? '#15803d' : '#dc2626'}">
@@ -948,8 +959,6 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
     <thead>
       <tr>
         <th>Agente</th>
-        <th>Propietarios que Maneja</th>
-        <th style="text-align:center">Unidades / Choferes</th>
         <th style="text-align:right">Total Entregado (+)</th>
         <th style="text-align:right">Gastos Deducidos (-)</th>
         <th style="text-align:right">Saldo Actual</th>
@@ -1198,8 +1207,6 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
                 <thead>
                   <tr>
                     <th style={{ textAlign: 'center' }}>Agente</th>
-                    <th style={{ textAlign: 'center' }}>Propietarios que Maneja</th>
-                    <th style={{ textAlign: 'center' }}>Unidades / Choferes</th>
                     <th style={{ textAlign: 'center' }}>Total Entregado (+)</th>
                     <th style={{ textAlign: 'center' }}>Gastos Deducidos (-)</th>
                     <th style={{ textAlign: 'center' }}>Saldo Actual</th>
@@ -1210,7 +1217,7 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan="8" style={{ textAlign: 'center', padding: '36px', color: 'var(--primary)' }}>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '36px', color: 'var(--primary)' }}>
                         <span className="material-symbols-outlined spinning" style={{ fontSize: '24px', verticalAlign: 'middle', marginRight: '8px' }}>sync</span>
                         Cargando saldos de agentes...
                       </td>
@@ -1224,26 +1231,6 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
                           {ag.contacto && (
                             <div style={{ fontSize: '11px', color: 'var(--on-surface-variant)' }}>{ag.contacto}</div>
                           )}
-                        </td>
-                        <td>
-                          {ag.propietarios && ag.propietarios.length > 0 ? (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                              {ag.propietarios.map(p => (
-                                <span key={p.id} className="badge badge-gray" style={{ fontSize: '11px', fontWeight: 600 }}>
-                                  👤 {p.nombre}
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span style={{ fontSize: '11px', color: 'var(--on-surface-variant)', fontStyle: 'italic' }}>
-                              Sin propietarios asignados
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ textAlign: 'center', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                          <span className="badge badge-gray mono" title={ag.gandolas?.map(g => g.placa).join(', ')}>
-                            {ag.total_gandolas} gandolas / {ag.total_choferes} choferes
-                          </span>
                         </td>
                         <td className="mono" style={{ textAlign: 'center', fontWeight: 600, color: '#4ade80' }}>
                           {formatUSD(ag.total_entregado)}

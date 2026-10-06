@@ -48,7 +48,7 @@ app.whenReady().then(async () => {
     createWindow();
   } catch (err) {
     console.error('Error al inicializar base de datos:', err);
-    dialog.showErrorBox('Error de Base de Datos', 'No se pudo inicializar la base de datos local SQLite: ' + err.message);
+    dialog.showErrorBox('Error de Base de Datos', 'No se pudo inicializar el almacenamiento de datos local: ' + err.message);
   }
 
   app.on('activate', () => {

@@ -1,15 +1,16 @@
 const { ipcMain } = require('electron');
+const crypto = require('crypto');
 const { dbAll, dbRun, dbGet } = require('../db/database');
 const { importRutasFromExcel } = require('../db/seeds');
 
 function registerCatalogosIPC() {
   ipcMain.handle('catalogos:obtener', async () => {
     try {
-      const rutas = await dbAll("SELECT * FROM Rutas WHERE activo = 1 ORDER BY origen ASC, destino ASC");
-      const origenesRows = await dbAll("SELECT DISTINCT origen FROM Rutas WHERE activo = 1 ORDER BY origen ASC");
-      const choferes = await dbAll("SELECT * FROM Choferes WHERE activo = 1 ORDER BY nombre ASC");
-      const gandolas = await dbAll("SELECT * FROM Gandolas WHERE activo = 1 ORDER BY placa ASC");
-      const propietarios = await dbAll("SELECT * FROM Propietarios ORDER BY nombre ASC");
+      const rutas = await dbAll("SELECT * FROM Rutas WHERE activo = 1 AND (deleted_at IS NULL) ORDER BY origen ASC, destino ASC");
+      const origenesRows = await dbAll("SELECT DISTINCT origen FROM Rutas WHERE activo = 1 AND (deleted_at IS NULL) ORDER BY origen ASC");
+      const choferes = await dbAll("SELECT * FROM Choferes WHERE activo = 1 AND (deleted_at IS NULL) ORDER BY nombre ASC");
+      const gandolas = await dbAll("SELECT * FROM Gandolas WHERE activo = 1 AND (deleted_at IS NULL) ORDER BY placa ASC");
+      const propietarios = await dbAll("SELECT * FROM Propietarios WHERE (deleted_at IS NULL) ORDER BY nombre ASC");
       return {
         ok: true,
         data: {
@@ -29,7 +30,7 @@ function registerCatalogosIPC() {
   // Propietarios CRUD
   ipcMain.handle('propietarios:listar', async () => {
     try {
-      const propietarios = await dbAll("SELECT * FROM Propietarios ORDER BY id DESC");
+      const propietarios = await dbAll("SELECT * FROM Propietarios WHERE (deleted_at IS NULL) ORDER BY id DESC");
       return { ok: true, data: propietarios };
     } catch (error) {
       return { ok: false, error: error.message };
@@ -40,12 +41,24 @@ function registerCatalogosIPC() {
     try {
       const { id, nombre, contacto } = propietario;
       if (!nombre) throw new Error('El nombre del propietario es obligatorio.');
+      const now = new Date().toISOString();
+
       if (id) {
-        await dbRun("UPDATE Propietarios SET nombre = ?, contacto = ? WHERE id = ?", [nombre.trim(), contacto || '', id]);
+        await dbRun(
+          `UPDATE Propietarios SET
+            nombre = ?, contacto = ?, updated_at = ?,
+            sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
+          WHERE id = ?`,
+          [nombre.trim(), contacto || '', now, id]
+        );
         return { ok: true, mensaje: 'Propietario actualizado' };
       } else {
-        const res = await dbRun("INSERT INTO Propietarios (nombre, contacto) VALUES (?, ?)", [nombre.trim(), contacto || '']);
-        return { ok: true, id: res.lastID, mensaje: 'Propietario creado' };
+        const uuid = crypto.randomUUID();
+        const res = await dbRun(
+          "INSERT INTO Propietarios (uuid, nombre, contacto, updated_at, sync_status) VALUES (?, ?, ?, ?, 'pending_insert')",
+          [uuid, nombre.trim(), contacto || '', now]
+        );
+        return { ok: true, id: res.lastID, uuid, mensaje: 'Propietario creado' };
       }
     } catch (error) {
       return { ok: false, error: error.message };
@@ -54,7 +67,8 @@ function registerCatalogosIPC() {
 
   ipcMain.handle('propietarios:eliminar', async (event, id) => {
     try {
-      await dbRun("DELETE FROM Propietarios WHERE id = ?", [id]);
+      const now = new Date().toISOString();
+      await dbRun("UPDATE Propietarios SET deleted_at = ?, updated_at = ?, sync_status = 'pending_delete' WHERE id = ?", [now, now, id]);
       return { ok: true, mensaje: 'Propietario eliminado' };
     } catch (error) {
       return { ok: false, error: error.message };
@@ -68,7 +82,7 @@ function registerCatalogosIPC() {
 
   ipcMain.handle('rutas:listar', async () => {
     try {
-      const rutas = await dbAll("SELECT * FROM Rutas ORDER BY id DESC");
+      const rutas = await dbAll("SELECT * FROM Rutas WHERE (deleted_at IS NULL) ORDER BY id DESC");
       return { ok: true, data: rutas };
     } catch (error) {
       return { ok: false, error: error.message };
@@ -81,18 +95,24 @@ function registerCatalogosIPC() {
       if (!origen || !destino || !precio_base) {
         throw new Error('Origen, destino y precio base son requeridos.');
       }
+      const now = new Date().toISOString();
+
       if (id) {
         await dbRun(
-          "UPDATE Rutas SET origen = ?, destino = ?, precio_base = ?, activo = ? WHERE id = ?",
-          [origen.trim(), destino.trim(), Number(precio_base), activo ? 1 : 0, id]
+          `UPDATE Rutas SET
+            origen = ?, destino = ?, precio_base = ?, activo = ?, updated_at = ?,
+            sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
+          WHERE id = ?`,
+          [origen.trim(), destino.trim(), Number(precio_base), activo ? 1 : 0, now, id]
         );
         return { ok: true, mensaje: 'Ruta actualizada con éxito' };
       } else {
+        const uuid = crypto.randomUUID();
         const res = await dbRun(
-          "INSERT INTO Rutas (origen, destino, precio_base, activo) VALUES (?, ?, ?, ?)",
-          [origen.trim(), destino.trim(), Number(precio_base), activo ? 1 : 0]
+          "INSERT INTO Rutas (uuid, origen, destino, precio_base, activo, updated_at, sync_status) VALUES (?, ?, ?, ?, ?, ?, 'pending_insert')",
+          [uuid, origen.trim(), destino.trim(), Number(precio_base), activo ? 1 : 0, now]
         );
-        return { ok: true, id: res.lastID, mensaje: 'Ruta creada con éxito' };
+        return { ok: true, id: res.lastID, uuid, mensaje: 'Ruta creada con éxito' };
       }
     } catch (error) {
       return { ok: false, error: error.message };
@@ -101,7 +121,8 @@ function registerCatalogosIPC() {
 
   ipcMain.handle('rutas:eliminar', async (event, id) => {
     try {
-      await dbRun("DELETE FROM Rutas WHERE id = ?", [id]);
+      const now = new Date().toISOString();
+      await dbRun("UPDATE Rutas SET deleted_at = ?, updated_at = ?, sync_status = 'pending_delete' WHERE id = ?", [now, now, id]);
       return { ok: true, mensaje: 'Ruta eliminada con éxito' };
     } catch (error) {
       return { ok: false, error: error.message };
@@ -111,7 +132,7 @@ function registerCatalogosIPC() {
   // Choferes CRUD
   ipcMain.handle('choferes:listar', async () => {
     try {
-      const choferes = await dbAll("SELECT * FROM Choferes ORDER BY id DESC");
+      const choferes = await dbAll("SELECT * FROM Choferes WHERE (deleted_at IS NULL) ORDER BY id DESC");
       return { ok: true, data: choferes };
     } catch (error) {
       return { ok: false, error: error.message };
@@ -122,19 +143,24 @@ function registerCatalogosIPC() {
     try {
       const { id, nombre, cedula, telefono, porcentaje_comision = 10.0, activo = 1, id_propietario } = chofer;
       if (!nombre) throw new Error('El nombre del chofer es obligatorio.');
+      const now = new Date().toISOString();
 
       if (id) {
         await dbRun(
-          "UPDATE Choferes SET nombre = ?, cedula = ?, telefono = ?, porcentaje_comision = ?, activo = ?, id_propietario = ? WHERE id = ?",
-          [nombre.trim(), cedula || '', telefono || '', Number(porcentaje_comision) || 10, activo ? 1 : 0, id_propietario || null, id]
+          `UPDATE Choferes SET
+            nombre = ?, cedula = ?, telefono = ?, porcentaje_comision = ?, activo = ?, id_propietario = ?, updated_at = ?,
+            sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
+          WHERE id = ?`,
+          [nombre.trim(), cedula || '', telefono || '', Number(porcentaje_comision) || 10, activo ? 1 : 0, id_propietario || null, now, id]
         );
         return { ok: true, mensaje: 'Chofer actualizado' };
       } else {
+        const uuid = crypto.randomUUID();
         const res = await dbRun(
-          "INSERT INTO Choferes (nombre, cedula, telefono, porcentaje_comision, activo, id_propietario) VALUES (?, ?, ?, ?, ?, ?)",
-          [nombre.trim(), cedula || '', telefono || '', Number(porcentaje_comision) || 10, activo ? 1 : 0, id_propietario || null]
+          "INSERT INTO Choferes (uuid, nombre, cedula, telefono, porcentaje_comision, activo, id_propietario, updated_at, sync_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_insert')",
+          [uuid, nombre.trim(), cedula || '', telefono || '', Number(porcentaje_comision) || 10, activo ? 1 : 0, id_propietario || null, now]
         );
-        return { ok: true, id: res.lastID, mensaje: 'Chofer registrado' };
+        return { ok: true, id: res.lastID, uuid, mensaje: 'Chofer registrado' };
       }
     } catch (error) {
       return { ok: false, error: error.message };
@@ -143,7 +169,8 @@ function registerCatalogosIPC() {
 
   ipcMain.handle('choferes:eliminar', async (event, id) => {
     try {
-      await dbRun("DELETE FROM Choferes WHERE id = ?", [id]);
+      const now = new Date().toISOString();
+      await dbRun("UPDATE Choferes SET deleted_at = ?, updated_at = ?, sync_status = 'pending_delete' WHERE id = ?", [now, now, id]);
       return { ok: true, mensaje: 'Chofer eliminado' };
     } catch (error) {
       return { ok: false, error: error.message };
@@ -153,7 +180,7 @@ function registerCatalogosIPC() {
   // Gandolas CRUD
   ipcMain.handle('gandolas:listar', async () => {
     try {
-      const gandolas = await dbAll("SELECT * FROM Gandolas ORDER BY id DESC");
+      const gandolas = await dbAll("SELECT * FROM Gandolas WHERE (deleted_at IS NULL) ORDER BY id DESC");
       return { ok: true, data: gandolas };
     } catch (error) {
       return { ok: false, error: error.message };
@@ -165,6 +192,7 @@ function registerCatalogosIPC() {
       const { id, placa, modelo, marca, año, capacidad, activo = 1, id_propietario } = gandola;
       const unidadVal = (modelo && modelo.trim()) ? modelo.trim() : (placa && placa.trim() ? placa.trim() : '');
       const placaClean = (placa && placa.trim()) ? placa.trim().toUpperCase() : unidadVal;
+      const now = new Date().toISOString();
 
       const cols = await dbAll(`PRAGMA table_info(Gandolas)`);
       if (!cols.some(c => c.name === 'marca')) {
@@ -176,16 +204,20 @@ function registerCatalogosIPC() {
 
       if (id) {
         await dbRun(
-          "UPDATE Gandolas SET placa = ?, modelo = ?, marca = ?, año = ?, capacidad = ?, activo = ?, id_propietario = ? WHERE id = ?",
-          [placaClean, unidadVal, marca || '', año || '', capacidad || '', activo ? 1 : 0, id_propietario || null, id]
+          `UPDATE Gandolas SET
+            placa = ?, modelo = ?, marca = ?, año = ?, capacidad = ?, activo = ?, id_propietario = ?, updated_at = ?,
+            sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
+          WHERE id = ?`,
+          [placaClean, unidadVal, marca || '', año || '', capacidad || '', activo ? 1 : 0, id_propietario || null, now, id]
         );
         return { ok: true, mensaje: 'Gandola/Unidad actualizada' };
       } else {
+        const uuid = crypto.randomUUID();
         const res = await dbRun(
-          "INSERT INTO Gandolas (placa, modelo, marca, año, capacidad, activo, id_propietario) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          [placaClean, unidadVal, marca || '', año || '', capacidad || '', activo ? 1 : 0, id_propietario || null]
+          "INSERT INTO Gandolas (uuid, placa, modelo, marca, año, capacidad, activo, id_propietario, updated_at, sync_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_insert')",
+          [uuid, placaClean, unidadVal, marca || '', año || '', capacidad || '', activo ? 1 : 0, id_propietario || null, now]
         );
-        return { ok: true, id: res.lastID, mensaje: 'Gandola/Unidad registrada' };
+        return { ok: true, id: res.lastID, uuid, mensaje: 'Gandola/Unidad registrada' };
       }
     } catch (error) {
       return { ok: false, error: error.message };
@@ -194,7 +226,8 @@ function registerCatalogosIPC() {
 
   ipcMain.handle('gandolas:eliminar', async (event, id) => {
     try {
-      await dbRun("DELETE FROM Gandolas WHERE id = ?", [id]);
+      const now = new Date().toISOString();
+      await dbRun("UPDATE Gandolas SET deleted_at = ?, updated_at = ?, sync_status = 'pending_delete' WHERE id = ?", [now, now, id]);
       return { ok: true, mensaje: 'Gandola eliminada' };
     } catch (error) {
       return { ok: false, error: error.message };

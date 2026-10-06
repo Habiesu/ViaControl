@@ -1,11 +1,12 @@
 const { ipcMain } = require('electron');
+const crypto = require('crypto');
 const { dbAll, dbRun, dbGet } = require('../db/database');
 
 function registerGastosIPC() {
   ipcMain.handle('gastos-extra:listar', async (event, filtros = {}) => {
     try {
       const { id_chofer, id_gandola, tipo, fecha_desde, fecha_hasta } = filtros;
-      let sql = "SELECT * FROM Gastos_Extra WHERE 1=1";
+      let sql = "SELECT * FROM Gastos_Extra WHERE (deleted_at IS NULL)";
       const params = [];
 
       if (id_chofer) {
@@ -39,27 +40,33 @@ function registerGastosIPC() {
 
   ipcMain.handle('gastos-extra:guardar', async (event, gasto) => {
     try {
-      const { id, fecha, id_chofer, id_gandola, id_viaje, id_propietario, categoria, tipo, descripcion, monto } = gasto;
+      const { id, fecha, id_chofer, id_gandola, id_viaje, id_propietario, id_agente, categoria, tipo, descripcion, monto } = gasto;
       if (!fecha || !monto) {
         throw new Error('Fecha y monto son requeridos');
       }
       const tipoVal = tipo || (categoria && categoria.includes('Chofer') ? 'Deduccion_Chofer' : 'Gasto_Empresa');
       const descVal = (descripcion && descripcion.trim()) ? descripcion.trim() : (categoria || 'Gasto de mantenimiento');
+      const now = new Date().toISOString();
 
       if (id) {
         await dbRun(`
           UPDATE Gastos_Extra SET
-            fecha = ?, id_chofer = ?, id_gandola = ?, id_viaje = ?, id_propietario = ?,
-            categoria = ?, tipo = ?, descripcion = ?, monto = ?
+            fecha = ?, id_chofer = ?, id_gandola = ?, id_viaje = ?, id_propietario = ?, id_agente = ?,
+            categoria = ?, tipo = ?, descripcion = ?, monto = ?,
+            updated_at = ?,
+            sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
           WHERE id = ?
-        `, [fecha, id_chofer || null, id_gandola || null, id_viaje || null, id_propietario || null, categoria || 'General', tipoVal, descVal, Number(monto), id]);
+        `, [fecha, id_chofer || null, id_gandola || null, id_viaje || null, id_propietario || null, id_agente ? Number(id_agente) : null, categoria || 'General', tipoVal, descVal, Number(monto), now, id]);
         return { ok: true, mensaje: 'Gasto extra actualizado' };
       } else {
+        const uuid = crypto.randomUUID();
         const res = await dbRun(`
-          INSERT INTO Gastos_Extra (fecha, id_chofer, id_gandola, id_viaje, id_propietario, categoria, tipo, descripcion, monto)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [fecha, id_chofer || null, id_gandola || null, id_viaje || null, id_propietario || null, categoria || 'General', tipoVal, descVal, Number(monto)]);
-        return { ok: true, id: res.lastID, mensaje: 'Gasto extra registrado' };
+          INSERT INTO Gastos_Extra (
+            uuid, fecha, id_chofer, id_gandola, id_viaje, id_propietario, id_agente,
+            categoria, tipo, descripcion, monto, updated_at, sync_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_insert')
+        `, [uuid, fecha, id_chofer || null, id_gandola || null, id_viaje || null, id_propietario || null, id_agente ? Number(id_agente) : null, categoria || 'General', tipoVal, descVal, Number(monto), now]);
+        return { ok: true, id: res.lastID, uuid, mensaje: 'Gasto extra registrado' };
       }
     } catch (error) {
       return { ok: false, error: error.message };
@@ -68,7 +75,8 @@ function registerGastosIPC() {
 
   ipcMain.handle('gastos-extra:eliminar', async (event, id) => {
     try {
-      await dbRun("DELETE FROM Gastos_Extra WHERE id = ?", [id]);
+      const now = new Date().toISOString();
+      await dbRun("UPDATE Gastos_Extra SET deleted_at = ?, updated_at = ?, sync_status = 'pending_delete' WHERE id = ?", [now, now, id]);
       return { ok: true, mensaje: 'Gasto extra eliminado' };
     } catch (error) {
       return { ok: false, error: error.message };

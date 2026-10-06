@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { formatUSD, getTodayString, getDateRangePresets } from '../utils/helpers.js';
 const { ipcRenderer } = window.require('electron');
 
@@ -20,6 +20,7 @@ function formatGandolaLabel(g) {
 
 function GastosExtraView({ catalogos, showToast }) {
   const [gastos, setGastos] = useState([]);
+  const [agentes, setAgentes] = useState([]);
   const [loading, setLoading] = useState(false);
 
   // Form State (Edición & Creación)
@@ -29,12 +30,15 @@ function GastosExtraView({ catalogos, showToast }) {
     categoria: 'Mantenimiento / Taller',
     id_gandola: '',
     descripcion: '',
-    monto: ''
+    monto: '',
+    asignarAgente: false,
+    id_agente: ''
   });
 
   // Filtros State
   const [filtroGandola, setFiltroGandola] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
+  const [filtroAgente, setFiltroAgente] = useState('');
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
   const [presetFecha, setPresetFecha] = useState('todo');
   const [fechaDesde, setFechaDesde] = useState('');
@@ -59,9 +63,27 @@ function GastosExtraView({ catalogos, showToast }) {
     }
   };
 
+  const cargarAgentes = async () => {
+    try {
+      const res = await ipcRenderer.invoke('saldos:obtenerAgentes');
+      if (res.ok && res.data) {
+        setAgentes(res.data);
+      }
+    } catch (e) {}
+  };
+
   useEffect(() => {
     cargarGastos();
+    cargarAgentes();
   }, []);
+
+  const agentMap = useMemo(() => {
+    const map = {};
+    (agentes || []).forEach(a => {
+      map[a.id] = a.nombre;
+    });
+    return map;
+  }, [agentes]);
 
   const cambiarPresetFecha = (preset) => {
     setPresetFecha(preset);
@@ -93,13 +115,23 @@ function GastosExtraView({ catalogos, showToast }) {
         return false;
       }
 
+      // Filtro por Agente / Destino
+      if (filtroAgente === '__SIN_AGENTE__') {
+        if (g.id_agente) return false;
+      } else if (filtroAgente === '__CON_AGENTE__') {
+        if (!g.id_agente) return false;
+      } else if (filtroAgente && String(g.id_agente) !== String(filtroAgente)) {
+        return false;
+      }
+
       // Filtro Búsqueda de Texto
       if (filtroBusqueda.trim()) {
         const q = filtroBusqueda.toLowerCase().trim();
         const desc = (g.descripcion || '').toLowerCase();
         const cat = (g.categoria || '').toLowerCase();
         const unit = (g.id_gandola || '').toLowerCase();
-        if (!desc.includes(q) && !cat.includes(q) && !unit.includes(q)) {
+        const agentName = (agentMap[g.id_agente] || '').toLowerCase();
+        if (!desc.includes(q) && !cat.includes(q) && !unit.includes(q) && !agentName.includes(q)) {
           return false;
         }
       }
@@ -110,7 +142,7 @@ function GastosExtraView({ catalogos, showToast }) {
 
       return true;
     });
-  }, [gastos, filtroGandola, filtroCategoria, filtroBusqueda, fechaDesde, fechaHasta]);
+  }, [gastos, filtroGandola, filtroCategoria, filtroAgente, filtroBusqueda, fechaDesde, fechaHasta, agentMap]);
 
   // Cálculos dinámicos KPIs
   const stats = useMemo(() => {
@@ -128,7 +160,9 @@ function GastosExtraView({ catalogos, showToast }) {
       categoria: gasto.categoria || 'Mantenimiento / Taller',
       id_gandola: gasto.id_gandola || '',
       descripcion: gasto.descripcion || '',
-      monto: gasto.monto || ''
+      monto: gasto.monto || '',
+      asignarAgente: !!gasto.id_agente,
+      id_agente: gasto.id_agente ? String(gasto.id_agente) : ''
     });
   };
 
@@ -139,7 +173,9 @@ function GastosExtraView({ catalogos, showToast }) {
       categoria: 'Mantenimiento / Taller',
       id_gandola: '',
       descripcion: '',
-      monto: ''
+      monto: '',
+      asignarAgente: false,
+      id_agente: ''
     });
   };
 
@@ -149,11 +185,16 @@ function GastosExtraView({ catalogos, showToast }) {
       return showToast('Ingrese un monto válido para el gasto', 'error');
     }
 
+    if (gastoForm.asignarAgente && !gastoForm.id_agente) {
+      return showToast('Seleccione el agente al cual deducir este gasto', 'error');
+    }
+
     try {
       const payload = {
         fecha: gastoForm.fecha,
         categoria: gastoForm.categoria,
         id_gandola: gastoForm.id_gandola || null,
+        id_agente: (gastoForm.asignarAgente && gastoForm.id_agente) ? Number(gastoForm.id_agente) : null,
         tipo: 'Gasto_Empresa',
         descripcion: gastoForm.descripcion,
         monto: Number(gastoForm.monto)
@@ -165,7 +206,10 @@ function GastosExtraView({ catalogos, showToast }) {
 
       const res = await ipcRenderer.invoke('gastos-extra:guardar', payload);
       if (res.ok) {
-        showToast(gastoForm.id ? 'Gasto de flota actualizado con éxito' : 'Gasto de flota registrado con éxito');
+        const msg = gastoForm.asignarAgente
+          ? 'Gasto guardado y asignado a Saldos de Agentes exitosamente'
+          : 'Gasto de flota registrado herméticamente (sin afectar agentes)';
+        showToast(gastoForm.id ? 'Gasto actualizado con éxito' : msg);
         cancelarEdicion();
         cargarGastos();
       } else {
@@ -232,7 +276,18 @@ function GastosExtraView({ catalogos, showToast }) {
               <select
                 className="form-select"
                 value={gastoForm.id_gandola}
-                onChange={e => setGastoForm({ ...gastoForm, id_gandola: e.target.value })}
+                onChange={e => {
+                  const placa = e.target.value;
+                  let autoAgent = gastoForm.id_agente;
+                  if (placa && !gastoForm.id_agente && agentes.length > 0) {
+                    const foundGandola = (catalogos.gandolas || []).find(g => String(g.placa) === String(placa));
+                    if (foundGandola && foundGandola.id_propietario) {
+                      const matched = agentes.find(a => (a.propietarios || []).some(p => p.id === foundGandola.id_propietario) || a.id_propietario_vinculado === foundGandola.id_propietario);
+                      if (matched) autoAgent = String(matched.id);
+                    }
+                  }
+                  setGastoForm({ ...gastoForm, id_gandola: placa, id_agente: autoAgent });
+                }}
               >
                 <option value="">Gasto General de Flota (Sin unidad)</option>
                 {(catalogos.gandolas || []).map(g => (
@@ -270,15 +325,76 @@ function GastosExtraView({ catalogos, showToast }) {
               />
             </div>
 
-            <div className="form-group" style={{ marginBottom: '18px' }}>
+            <div className="form-group" style={{ marginBottom: '14px' }}>
               <label className="form-label">Descripción Detallada (Opcional)</label>
               <textarea
-                rows="3"
+                rows="2"
                 className="form-textarea"
                 placeholder="Ej: Compra de 2 cauchos 295/80R22.5 o reparación de frenos traseros..."
                 value={gastoForm.descripcion}
                 onChange={e => setGastoForm({ ...gastoForm, descripcion: e.target.value })}
               ></textarea>
+            </div>
+
+            {/* SECCIÓN OPCIONAL: VINCULACIÓN HERMÉTICA O REFLEJO EN SALDOS DE AGENTES */}
+            <div style={{
+              marginBottom: '16px',
+              padding: '12px',
+              borderRadius: '8px',
+              background: gastoForm.asignarAgente ? 'rgba(90, 240, 179, 0.08)' : 'var(--surface-container-low)',
+              border: `1px solid ${gastoForm.asignarAgente ? 'var(--primary)' : 'var(--outline-variant)'}`,
+              transition: 'all 0.2s ease'
+            }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0, userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  style={{ accentColor: 'var(--primary)', width: '16px', height: '16px', cursor: 'pointer' }}
+                  checked={gastoForm.asignarAgente}
+                  onChange={e => {
+                    const checked = e.target.checked;
+                    let defaultAgent = gastoForm.id_agente;
+                    if (checked && !defaultAgent && agentes.length > 0) {
+                      if (gastoForm.id_gandola) {
+                        const foundGandola = (catalogos.gandolas || []).find(g => String(g.placa) === String(gastoForm.id_gandola));
+                        if (foundGandola && foundGandola.id_propietario) {
+                          const matched = agentes.find(a => (a.propietarios || []).some(p => p.id === foundGandola.id_propietario) || a.id_propietario_vinculado === foundGandola.id_propietario);
+                          if (matched) defaultAgent = String(matched.id);
+                        }
+                      }
+                      if (!defaultAgent) defaultAgent = String(agentes[0].id);
+                    }
+                    setGastoForm({ ...gastoForm, asignarAgente: checked, id_agente: checked ? defaultAgent : '' });
+                  }}
+                />
+                <span style={{ fontSize: '13px', fontWeight: 600, color: gastoForm.asignarAgente ? 'var(--primary)' : 'var(--on-surface)' }}>
+                  Deducir / Asignar a Saldos de Agentes
+                </span>
+              </label>
+
+              {gastoForm.asignarAgente && (
+                <div style={{ marginTop: '10px' }}>
+                  <label className="form-label" style={{ fontSize: '11px', marginBottom: '4px' }}>
+                    Agente Responsable *
+                  </label>
+                  <select
+                    className="form-select"
+                    style={{ width: '100%', fontSize: '12px' }}
+                    value={gastoForm.id_agente}
+                    onChange={e => setGastoForm({ ...gastoForm, id_agente: e.target.value })}
+                    required={gastoForm.asignarAgente}
+                  >
+                    <option value="">-- Seleccionar Agente --</option>
+                    {agentes.map(ag => (
+                      <option key={ag.id} value={ag.id}>
+                        👤 {ag.nombre} {ag.total_propietarios ? `(${ag.total_propietarios} prop.)` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: '11px', color: 'var(--outline)', marginTop: '4px' }}>
+                    Se reflejará en el balance y en el Historial de Movimientos de este agente.
+                  </div>
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: '8px' }}>
@@ -297,19 +413,19 @@ function GastosExtraView({ catalogos, showToast }) {
         {/* COLUMNA DERECHA: BARRA DE FILTROS + TABLA */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', minWidth: 0 }}>
           
-          {/* BARRA DE FILTROS REORGANIZADA DE MANERA LIMPIA */}
+          {/* BARRA DE FILTROS */}
           <div className="card" style={{ padding: '16px' }}>
             {/* Fila 1: Buscador y Dropdowns */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '12px' }}>
               
               {/* Campo Búsqueda */}
-              <div style={{ position: 'relative', minWidth: '180px' }}>
+              <div style={{ position: 'relative', minWidth: '160px' }}>
                 <span className="material-symbols-outlined" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--outline)', fontSize: '18px' }}>search</span>
                 <input
                   type="text"
                   className="form-input"
                   style={{ paddingLeft: '34px', width: '100%' }}
-                  placeholder="Buscar descripción o categoría..."
+                  placeholder="Buscar descripción, agente..."
                   value={filtroBusqueda}
                   onChange={e => setFiltroBusqueda(e.target.value)}
                 />
@@ -345,6 +461,23 @@ function GastosExtraView({ catalogos, showToast }) {
                   <option value="Cambio de Aceite / Filtros">Cambio de Aceite / Filtros</option>
                   <option value="Tránsito / Permisología">Tránsito / Permisología</option>
                   <option value="Otros Gastos Operativos">Otros Gastos Operativos</option>
+                </select>
+              </div>
+
+              {/* Filtro Agente / Destino */}
+              <div>
+                <select
+                  className="form-select"
+                  style={{ width: '100%' }}
+                  value={filtroAgente}
+                  onChange={e => setFiltroAgente(e.target.value)}
+                >
+                  <option value="">Todos los Destinos</option>
+                  <option value="__SIN_AGENTE__">🏢 Solo Flota General</option>
+                  <option value="__CON_AGENTE__">👤 Con Agente Asignado</option>
+                  {agentes.map(ag => (
+                    <option key={ag.id} value={ag.id}>👤 {ag.nombre}</option>
+                  ))}
                 </select>
               </div>
 
@@ -387,13 +520,13 @@ function GastosExtraView({ catalogos, showToast }) {
           </div>
 
           {/* TABLA DE GASTOS */}
-          <div className="table-container">
+          <div className="table-container" style={{ maxHeight: '460px', overflowY: 'auto' }}>
             <table className="data-table">
               <thead>
                 <tr>
                   <th>Fecha</th>
                   <th>Categoría</th>
-                  <th>Unidad</th>
+                  <th>Unidad / Destino</th>
                   <th>Descripción</th>
                   <th>Monto ($)</th>
                   <th style={{ textAlign: 'center' }}>Acciones</th>
@@ -420,16 +553,26 @@ function GastosExtraView({ catalogos, showToast }) {
                     return found ? formatGandolaLabel(found) : `Unidad N° ${ge.id_gandola}`;
                   })();
 
+                  const agenteNombre = ge.id_agente ? (agentMap[ge.id_agente] || `Agente #${ge.id_agente}`) : null;
+
                   return (
                     <tr key={ge.id} style={{ background: gastoForm.id === ge.id ? 'rgba(90, 240, 179, 0.08)' : 'transparent' }}>
                       <td className="mono">{ge.fecha}</td>
                       <td><span className="badge badge-amber">{ge.categoria}</span></td>
                       <td>
-                        {unidadLabel ? (
-                          <span className="badge badge-blue mono">{unidadLabel}</span>
-                        ) : (
-                          <span className="badge" style={{ background: 'var(--surface-container-high)', color: 'var(--outline)' }}>Flota General</span>
-                        )}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                          {unidadLabel ? (
+                            <span className="badge badge-blue mono">{unidadLabel}</span>
+                          ) : (
+                            <span className="badge" style={{ background: 'var(--surface-container-high)', color: 'var(--outline)' }}>Flota General</span>
+                          )}
+                          {agenteNombre && (
+                            <span className="badge badge-emerald" title="Deducido de Saldos de Agentes" style={{ fontSize: '10px' }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: '11px', marginRight: '2px' }}>person</span>
+                              {agenteNombre}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td>{ge.descripcion || <span style={{ color: 'var(--outline)', fontStyle: 'italic' }}>Sin descripción</span>}</td>
                       <td className="mono" style={{ color: 'var(--tertiary)', fontWeight: 700 }}>
@@ -478,6 +621,11 @@ function GastosExtraView({ catalogos, showToast }) {
 
             <div style={{ margin: '14px 0', fontSize: '14px', color: 'var(--on-surface)' }}>
               ¿Está seguro que desea eliminar este gasto de <strong>{gastoAEliminar.categoria}</strong> por un monto de <strong style={{ color: 'var(--tertiary)' }}>{formatUSD(gastoAEliminar.monto)}</strong>?
+              {gastoAEliminar.id_agente && (
+                <div style={{ marginTop: '8px', fontSize: '12px', color: '#f87171' }}>
+                  ⚠️ Este gasto está asignado a un agente; al eliminarlo, se reintegrará a su saldo disponible.
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>

@@ -1,4 +1,4 @@
-const { ipcMain } = require('electron');
+const { ipcMain, app } = require('electron');
 const { dbAll, dbGet, getDatabasePath } = require('../db/database');
 
 function registerReportesIPC() {
@@ -7,7 +7,7 @@ function registerReportesIPC() {
     try {
       if (!id_chofer) throw new Error('Debe seleccionar un chofer.');
 
-      let sqlViajes = "SELECT * FROM Viajes WHERE id_chofer = ?";
+      let sqlViajes = "SELECT * FROM Viajes WHERE id_chofer = ? AND (deleted_at IS NULL)";
       const paramsViajes = [id_chofer];
       if (fecha_inicio) {
         sqlViajes += " AND fecha >= ?";
@@ -21,7 +21,7 @@ function registerReportesIPC() {
 
       const viajes = await dbAll(sqlViajes, paramsViajes);
 
-      let sqlGastos = "SELECT * FROM Gastos_Extra WHERE id_chofer = ? AND tipo = 'Deduccion_Chofer'";
+      let sqlGastos = "SELECT * FROM Gastos_Extra WHERE id_chofer = ? AND tipo = 'Deduccion_Chofer' AND (deleted_at IS NULL)";
       const paramsGastos = [id_chofer];
       if (fecha_inicio) {
         sqlGastos += " AND fecha >= ?";
@@ -34,7 +34,7 @@ function registerReportesIPC() {
       sqlGastos += " ORDER BY fecha ASC, id ASC";
 
       const deducciones = await dbAll(sqlGastos, paramsGastos);
-      const choferInfo = await dbGet("SELECT * FROM Choferes WHERE nombre = ?", [id_chofer]);
+      const choferInfo = await dbGet("SELECT * FROM Choferes WHERE nombre = ? AND (deleted_at IS NULL)", [id_chofer]);
 
       const totalViajes = viajes.length;
       const fleteBrutoTotal = viajes.reduce((sum, v) => sum + (Number(v.precio_viaje) || 0), 0);
@@ -75,10 +75,10 @@ function registerReportesIPC() {
     try {
       if (!id_propietario) throw new Error('Debe seleccionar un propietario.');
 
-      const propietario = await dbGet("SELECT * FROM Propietarios WHERE id = ?", [id_propietario]);
+      const propietario = await dbGet("SELECT * FROM Propietarios WHERE id = ? AND (deleted_at IS NULL)", [id_propietario]);
       if (!propietario) throw new Error('Propietario no encontrado.');
 
-      const gandolas = await dbAll("SELECT * FROM Gandolas WHERE id_propietario = ? AND activo = 1 ORDER BY placa ASC", [id_propietario]);
+      const gandolas = await dbAll("SELECT * FROM Gandolas WHERE id_propietario = ? AND activo = 1 AND (deleted_at IS NULL) ORDER BY placa ASC", [id_propietario]);
 
       const resumenGandolas = [];
       let totalGeneralFlete = 0;
@@ -88,7 +88,7 @@ function registerReportesIPC() {
       let totalGeneralGanancia = 0;
 
       for (const g of gandolas) {
-        let sql = "SELECT * FROM Viajes WHERE id_gandola = ?";
+        let sql = "SELECT * FROM Viajes WHERE id_gandola = ? AND (deleted_at IS NULL)";
         const params = [g.placa];
         if (fecha_inicio) { sql += " AND fecha >= ?"; params.push(fecha_inicio); }
         if (fecha_fin) { sql += " AND fecha <= ?"; params.push(fecha_fin); }
@@ -96,7 +96,7 @@ function registerReportesIPC() {
 
         const viajes = await dbAll(sql, params);
 
-        let sqlTaller = "SELECT * FROM Gastos_Extra WHERE (id_gandola = ? OR id_gandola = ?) AND tipo = 'Gasto_Empresa'";
+        let sqlTaller = "SELECT * FROM Gastos_Extra WHERE (id_gandola = ? OR id_gandola = ?) AND tipo = 'Gasto_Empresa' AND (deleted_at IS NULL)";
         const paramsTaller = [g.placa, String(g.id)];
         if (fecha_inicio) { sqlTaller += " AND fecha >= ?"; paramsTaller.push(fecha_inicio); }
         if (fecha_fin) { sqlTaller += " AND fecha <= ?"; paramsTaller.push(fecha_fin); }
@@ -165,15 +165,15 @@ function registerReportesIPC() {
         fin = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
       }
 
-      const gandolas = await dbAll("SELECT * FROM Gandolas WHERE activo = 1 ORDER BY placa ASC");
+      const gandolas = await dbAll("SELECT * FROM Gandolas WHERE activo = 1 AND (deleted_at IS NULL) ORDER BY placa ASC");
 
       const viajes = await dbAll(
-        "SELECT * FROM Viajes WHERE fecha >= ? AND fecha <= ? ORDER BY fecha ASC",
+        "SELECT * FROM Viajes WHERE fecha >= ? AND fecha <= ? AND (deleted_at IS NULL) ORDER BY fecha ASC",
         [inicio, fin]
       );
 
       const gastosGandolas = await dbAll(
-        "SELECT * FROM Gastos_Extra WHERE fecha >= ? AND fecha <= ? AND id_gandola IS NOT NULL AND tipo = 'Gasto_Empresa'",
+        "SELECT * FROM Gastos_Extra WHERE fecha >= ? AND fecha <= ? AND id_gandola IS NOT NULL AND tipo = 'Gasto_Empresa' AND (deleted_at IS NULL)",
         [inicio, fin]
       );
 
@@ -241,10 +241,10 @@ function registerReportesIPC() {
   // Sistema Info
   ipcMain.handle('sistema:info', async () => {
     const dbPath = getDatabasePath();
-    const viajesCount = (await dbGet("SELECT COUNT(*) as c FROM Viajes")).c;
-    const rutasCount = (await dbGet("SELECT COUNT(*) as c FROM Rutas")).c;
-    const choferesCount = (await dbGet("SELECT COUNT(*) as c FROM Choferes")).c;
-    const gandolasCount = (await dbGet("SELECT COUNT(*) as c FROM Gandolas")).c;
+    const viajesCount = (await dbGet("SELECT COUNT(*) as c FROM Viajes WHERE (deleted_at IS NULL)")).c;
+    const rutasCount = (await dbGet("SELECT COUNT(*) as c FROM Rutas WHERE (deleted_at IS NULL)")).c;
+    const choferesCount = (await dbGet("SELECT COUNT(*) as c FROM Choferes WHERE (deleted_at IS NULL)")).c;
+    const gandolasCount = (await dbGet("SELECT COUNT(*) as c FROM Gandolas WHERE (deleted_at IS NULL)")).c;
     return {
       ok: true,
       data: {
@@ -253,10 +253,11 @@ function registerReportesIPC() {
         rutasCount,
         choferesCount,
         gandolasCount,
-        version: '1.0.0'
+        version: app.getVersion()
       }
     };
   });
 }
 
 module.exports = { registerReportesIPC };
+

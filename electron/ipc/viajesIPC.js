@@ -1,4 +1,5 @@
 const { ipcMain } = require('electron');
+const crypto = require('crypto');
 const { dbAll, dbRun, dbGet } = require('../db/database');
 
 function registerViajesIPC() {
@@ -67,19 +68,23 @@ function registerViajesIPC() {
         if (gandolaDb && gandolaDb.id_propietario) idPropFinal = gandolaDb.id_propietario;
       }
 
+      const now = new Date().toISOString();
       if (id) {
         await dbRun(`
           UPDATE Viajes SET
             fecha = ?, contenedor = ?, origen = ?, destino = ?,
             id_gandola = ?, id_chofer = ?, id_propietario = ?, precio_viaje = ?, pago_chofer = ?,
             peajes = ?, viaticos = ?, gasoil = ?, total_gastos = ?,
-            ganancia = ?, notas = ?
+            ganancia = ?, notas = ?,
+            updated_at = ?,
+            sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
           WHERE id = ?
         `, [
           fecha, contenedor || '', origen, destino,
           id_gandola, id_chofer, idPropFinal, precioFinal, pagoChofer,
           peajesNum, viaticosNum, gasoilNum, totalGastos,
-          ganancia, notas, id
+          ganancia, notas,
+          now, id
         ]);
         return {
           ok: true,
@@ -87,21 +92,23 @@ function registerViajesIPC() {
           calculos: { precio_viaje: precioFinal, pago_chofer: pagoChofer, total_gastos: totalGastos, ganancia }
         };
       } else {
+        const uuid = crypto.randomUUID();
         const res = await dbRun(`
           INSERT INTO Viajes (
-            fecha, contenedor, origen, destino, id_gandola, id_chofer, id_propietario,
+            uuid, fecha, contenedor, origen, destino, id_gandola, id_chofer, id_propietario,
             precio_viaje, pago_chofer, peajes, viaticos, gasoil,
-            total_gastos, ganancia, notas
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            total_gastos, ganancia, notas, updated_at, sync_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_insert')
         `, [
-          fecha, contenedor || '', origen, destino, id_gandola, id_chofer, idPropFinal,
+          uuid, fecha, contenedor || '', origen, destino, id_gandola, id_chofer, idPropFinal,
           precioFinal, pagoChofer, peajesNum, viaticosNum, gasoilNum,
-          totalGastos, ganancia, notas
+          totalGastos, ganancia, notas, now
         ]);
         return {
           ok: true,
           id: res.lastID,
-          mensaje: 'Viaje registrado exitosamente en SQLite',
+          uuid,
+          mensaje: 'Viaje registrado exitosamente',
           calculos: { precio_viaje: precioFinal, pago_chofer: pagoChofer, total_gastos: totalGastos, ganancia }
         };
       }
@@ -114,7 +121,7 @@ function registerViajesIPC() {
   ipcMain.handle('viajes:listar', async (event, filtros = {}) => {
     try {
       const { fecha_desde, fecha_hasta, id_chofer, id_gandola, id_propietario, busqueda } = filtros;
-      let sql = "SELECT * FROM Viajes WHERE 1=1";
+      let sql = "SELECT * FROM Viajes WHERE (deleted_at IS NULL)";
       const params = [];
 
       if (fecha_desde) {
@@ -153,7 +160,8 @@ function registerViajesIPC() {
 
   ipcMain.handle('viajes:eliminar', async (event, id) => {
     try {
-      await dbRun("DELETE FROM Viajes WHERE id = ?", [id]);
+      const now = new Date().toISOString();
+      await dbRun("UPDATE Viajes SET deleted_at = ?, updated_at = ?, sync_status = 'pending_delete' WHERE id = ?", [now, now, id]);
       return { ok: true, mensaje: 'Viaje eliminado' };
     } catch (error) {
       return { ok: false, error: error.message };
@@ -163,7 +171,8 @@ function registerViajesIPC() {
   ipcMain.handle('ier:actualizarEstado', async (event, { id, campo, valor }) => {
     try {
       if (!['entregado', 'pagado'].includes(campo)) throw new Error('Campo no válido');
-      await dbRun(`UPDATE Viajes SET ${campo} = ? WHERE id = ?`, [valor ? 1 : 0, id]);
+      const now = new Date().toISOString();
+      await dbRun(`UPDATE Viajes SET ${campo} = ?, updated_at = ?, sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END WHERE id = ?`, [valor ? 1 : 0, now, id]);
       return { ok: true };
     } catch (error) {
       return { ok: false, error: error.message };

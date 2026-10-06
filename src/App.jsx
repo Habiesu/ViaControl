@@ -1,4 +1,6 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import AuthGuard, { useAuth } from './components/AuthGuard.jsx';
+import UpdateNotifier from './components/UpdateNotifier.jsx';
 
 const PropietariosView = lazy(() => import('./views/PropietariosView.jsx'));
 const NuevoViajeView = lazy(() => import('./views/NuevoViajeView.jsx'));
@@ -10,7 +12,6 @@ const SaldosPropietariosView = lazy(() => import('./views/SaldosPropietariosView
 const RutasView = lazy(() => import('./views/RutasView.jsx'));
 const GastosExtraView = lazy(() => import('./views/GastosExtraView.jsx'));
 const AjustesView = lazy(() => import('./views/AjustesView.jsx'));
-import UpdateNotifier from './components/UpdateNotifier.jsx';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -32,13 +33,15 @@ const NAV_GROUPS = [
   ['saldos-propietarios', 'propietarios', 'rutas', 'gastos_extra'],
 ];
 
-export default function App() {
+function AppContent({ onRegisterRefresh }) {
+  const { user, logout, syncStatus, triggerSync } = useAuth();
   const [currentTab, setCurrentTab] = useState('nuevo-viaje');
   const [catalogos, setCatalogos] = useState({
     rutas: [], origenes: [], choferes: [], gandolas: [], propietarios: [],
   });
   const [toasts, setToasts] = useState([]);
   const [theme, setTheme] = useState('light');
+  const [appVersion, setAppVersion] = useState('');
 
   // Cargar tema guardado al iniciar
   useEffect(() => {
@@ -63,16 +66,27 @@ export default function App() {
     }
   };
 
-  useEffect(() => { loadCatalogos(); }, []);
-
   const showToast = (message, type = 'success') => {
     const id = Date.now() + Math.random();
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
   };
 
-  const tab = TABS[currentTab];
+  useEffect(() => {
+    loadCatalogos();
+    ipcRenderer.invoke('ajustes:obtenerVersion').then(res => {
+      if (res && res.ok && res.version) setAppVersion(res.version);
+    }).catch(() => {});
 
+    if (onRegisterRefresh) {
+      onRegisterRefresh((count) => {
+        showToast(`Sincronización: ${count} registro(s) actualizados desde la nube`);
+        loadCatalogos();
+      });
+    }
+  }, []);
+
+  const tab = TABS[currentTab];
   const viewProps = { catalogos, showToast };
 
   return (
@@ -116,14 +130,72 @@ export default function App() {
             <span className="material-symbols-outlined">settings</span>
             <span>Ajustes</span>
           </div>
-          <div className="status-chip">
-            <span className="status-beacon" />
-            <span>Sistema En Línea</span>
-            <span style={{ marginLeft: 'auto', fontWeight: 600 }}>v1.0</span>
+
+          {/* ESTADO DE SINCRONIZACIÓN SUPABASE */}
+          <div
+            className="status-chip"
+            onClick={triggerSync}
+            style={{ cursor: 'pointer', transition: 'all 0.2s', userSelect: 'none' }}
+            title={syncStatus.lastSync ? `Última sincronización: ${new Date(syncStatus.lastSync).toLocaleTimeString()} (Clic para sincronizar ahora)` : 'Clic para sincronizar con la nube'}
+          >
+            <span
+              className={`material-symbols-outlined ${syncStatus.syncing ? 'spinning' : ''}`}
+              style={{
+                fontSize: '16px',
+                color: syncStatus.syncing ? '#3b82f6' : (syncStatus.error ? '#f59e0b' : '#10b981')
+              }}
+            >
+              {syncStatus.syncing ? 'sync' : (syncStatus.error ? 'cloud_off' : 'cloud_done')}
+            </span>
+            <span style={{ fontSize: '11px', fontWeight: 500 }}>
+              {syncStatus.syncing
+                ? 'Sincronizando...'
+                : (syncStatus.pendingCount > 0
+                    ? `${syncStatus.pendingCount} pendientes`
+                    : 'Nube al día')}
+            </span>
+            <span style={{ marginLeft: 'auto', fontWeight: 600, fontSize: '11px', opacity: 0.8 }}>
+              {appVersion ? `v${appVersion}` : ''}
+            </span>
           </div>
-          <div className="status-chip">
-            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>person</span>
-            <span>Operador Base</span>
+
+          {/* PERFIL DE USUARIO Y LOGOUT */}
+          <div className="status-chip" style={{ justifyContent: 'space-between', padding: '6px 10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#3b82f6' }}>person</span>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  textOverflow: 'ellipsis',
+                  overflow: 'hidden',
+                  maxWidth: '120px'
+                }}
+                title={user?.email || 'Usuario'}
+              >
+                {user?.email?.split('@')[0] || 'Operador'}
+              </span>
+            </div>
+            <button
+              onClick={logout}
+              title="Cerrar Sesión"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#94a3b8',
+                cursor: 'pointer',
+                padding: '2px 4px',
+                display: 'flex',
+                alignItems: 'center',
+                borderRadius: '4px',
+                transition: 'color 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+              onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>logout</span>
+            </button>
           </div>
         </div>
       </aside>
@@ -141,6 +213,23 @@ export default function App() {
             <h1>{tab?.label}</h1>
           </div>
           <div className="topbar-actions">
+            {/* BOTÓN FORZAR SINCRONIZACIÓN */}
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={triggerSync}
+              disabled={syncStatus.syncing}
+              title={syncStatus.lastSync ? `Última sincronización: ${new Date(syncStatus.lastSync).toLocaleTimeString()}` : 'Sincronizar con la nube'}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <span
+                className={`material-symbols-outlined ${syncStatus.syncing ? 'spinning' : ''}`}
+                style={{ fontSize: '16px', color: syncStatus.syncing ? '#3b82f6' : 'inherit' }}
+              >
+                sync
+              </span>
+              <span>{syncStatus.syncing ? 'Sincronizando' : 'Sincronizar'}</span>
+            </button>
+
             <button
               id="theme-toggle"
               className="theme-toggle-btn"
@@ -171,7 +260,7 @@ export default function App() {
             {currentTab === 'nuevo-viaje' && (
               <NuevoViajeView
                 {...viewProps}
-                onViajeGuardado={() => { showToast('¡Viaje registrado y guardado con éxito!'); loadCatalogos(); }}
+                onViajeGuardado={() => { showToast('¡Viaje registrado y guardado con éxito!'); loadCatalogos(); triggerSync(); }}
                 onActualizarCatalogos={loadCatalogos}
               />
             )}
@@ -209,5 +298,17 @@ export default function App() {
       {/* NOTIFICADOR DE ACTUALIZACIONES AUTOMÁTICAS */}
       <UpdateNotifier />
     </div>
+  );
+}
+
+export default function App() {
+  const refreshCallbackRef = useRef(null);
+
+  return (
+    <AuthGuard onDataRefreshed={(count) => {
+      if (refreshCallbackRef.current) refreshCallbackRef.current(count);
+    }}>
+      <AppContent onRegisterRefresh={(cb) => { refreshCallbackRef.current = cb; }} />
+    </AuthGuard>
   );
 }

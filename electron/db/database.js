@@ -11,7 +11,22 @@ function getDatabasePath() {
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
-  return path.join(dataDir, 'gandolas_db.sqlite');
+  const dbFile = path.join(dataDir, 'gandolas_db.sqlite');
+
+  // Si no existe en la carpeta actual pero existe en 'kengo', migrar los datos automáticamente
+  if (!fs.existsSync(dbFile)) {
+    const legacyPath = path.join(path.dirname(userDataPath), 'kengo', 'gandolas_data', 'gandolas_db.sqlite');
+    if (fs.existsSync(legacyPath)) {
+      try {
+        fs.copyFileSync(legacyPath, dbFile);
+        console.log('Base de datos migrada exitosamente desde kengo a ViaControl');
+      } catch (e) {
+        console.warn('No se pudo migrar BD legacy:', e);
+      }
+    }
+  }
+
+  return dbFile;
 }
 
 function dbRun(sql, params = []) {
@@ -57,7 +72,7 @@ async function initDatabase() {
     console.warn('Advertencia pragma SQLite:', e.message);
   }
 
-  // Creación de tablas
+  // CreaciÃ³n de tablas
   await dbRun(`
     CREATE TABLE IF NOT EXISTS Rutas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -215,7 +230,64 @@ async function initDatabase() {
     await dbRun(`ALTER TABLE Aportes_Propietarios ADD COLUMN id_agente INTEGER`);
   }
 
-  // Índices
+  // Tabla de metadatos de sincronización
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS SyncMeta (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    )
+  `);
+
+  // Migraciones de columnas para Offline-First y Sincronización en todas las tablas
+  const crypto = require('crypto');
+  const SYNC_TABLES = [
+    'Grupos_Propietarios',
+    'Propietarios',
+    'Agentes',
+    'Rutas',
+    'Choferes',
+    'Gandolas',
+    'Viajes',
+    'Gastos_Extra',
+    'Aportes_Propietarios'
+  ];
+
+  for (const tabla of SYNC_TABLES) {
+    const cols = await dbAll(`PRAGMA table_info(${tabla})`);
+    if (!cols.some(c => c.name === 'uuid')) {
+      await dbRun(`ALTER TABLE ${tabla} ADD COLUMN uuid TEXT`);
+    }
+    if (!cols.some(c => c.name === 'user_id')) {
+      await dbRun(`ALTER TABLE ${tabla} ADD COLUMN user_id TEXT`);
+    }
+    if (!cols.some(c => c.name === 'updated_at')) {
+      await dbRun(`ALTER TABLE ${tabla} ADD COLUMN updated_at TEXT`);
+    }
+    if (!cols.some(c => c.name === 'deleted_at')) {
+      await dbRun(`ALTER TABLE ${tabla} ADD COLUMN deleted_at TEXT`);
+    }
+    if (!cols.some(c => c.name === 'sync_status')) {
+      await dbRun(`ALTER TABLE ${tabla} ADD COLUMN sync_status TEXT DEFAULT 'pending_insert'`);
+    }
+
+    // Inicializar UUIDs y timestamps para registros históricos locales existentes
+    const unassigned = await dbAll(`SELECT id FROM ${tabla} WHERE uuid IS NULL OR uuid = ''`);
+    for (const row of unassigned) {
+      const newUuid = crypto.randomUUID();
+      const now = new Date().toISOString();
+      await dbRun(
+        `UPDATE ${tabla} SET uuid = ?, updated_at = ?, sync_status = 'pending_insert' WHERE id = ?`,
+        [newUuid, now, row.id]
+      );
+    }
+
+    // Índices de sincronización
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_${tabla.toLowerCase()}_uuid ON ${tabla}(uuid)`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_${tabla.toLowerCase()}_sync ON ${tabla}(sync_status)`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_${tabla.toLowerCase()}_updated ON ${tabla}(updated_at)`);
+  }
+
+  // Índices generales
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_propietarios_grupo ON Propietarios(id_grupo)`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_propietarios_agente ON Propietarios(id_agente)`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_viajes_fecha ON Viajes(fecha)`);
@@ -241,5 +313,18 @@ module.exports = {
   dbRun,
   dbGet,
   dbAll,
-  getDatabasePath
+  getDatabasePath,
+  SYNC_TABLES: [
+    'Grupos_Propietarios',
+    'Propietarios',
+    'Agentes',
+    'Rutas',
+    'Choferes',
+    'Gandolas',
+    'Viajes',
+    'Gastos_Extra',
+    'Aportes_Propietarios'
+  ]
 };
+
+
