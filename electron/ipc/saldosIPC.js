@@ -190,6 +190,7 @@ function registerSaldosIPC() {
           movimientos.push({
             id: `aporte-${a.id}`,
             real_id: a.id,
+            updated_at: a.updated_at || a.fecha || '',
             tipo_registro: 'aporte',
             tipo_movimiento: 'INGRESO',
             fecha: a.fecha,
@@ -237,6 +238,7 @@ function registerSaldosIPC() {
           movimientos.push({
             id: `gasto-${g.id}`,
             real_id: g.id,
+            updated_at: g.updated_at || g.fecha || '',
             tipo_registro: 'gasto',
             tipo_movimiento: 'EGRESO',
             fecha: g.fecha,
@@ -253,10 +255,13 @@ function registerSaldosIPC() {
         });
       }
 
-      // Ordenar cronológicamente descendente
+      // Ordenar: primero por fecha DESC, luego por updated_at DESC, luego por real_id DESC
       movimientos.sort((a, b) => {
-        if (b.fecha === a.fecha) return (b.id > a.id ? 1 : -1);
-        return b.fecha.localeCompare(a.fecha);
+        const fechaCmp = b.fecha.localeCompare(a.fecha);
+        if (fechaCmp !== 0) return fechaCmp;
+        const uaCmp = (b.updated_at || '').localeCompare(a.updated_at || '');
+        if (uaCmp !== 0) return uaCmp;
+        return (b.real_id || 0) - (a.real_id || 0);
       });
 
       return { ok: true, data: movimientos };

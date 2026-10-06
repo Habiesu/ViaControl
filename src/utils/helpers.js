@@ -13,9 +13,13 @@ export function formatUSD(num) {
   });
 }
 
-/** Retorna la fecha de hoy en formato YYYY-MM-DD */
+/** Retorna la fecha de hoy en formato YYYY-MM-DD (hora local, no UTC) */
 export function getTodayString() {
-  return new Date().toISOString().split('T')[0];
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /** Parsea un string de teléfono venezolano a { prefijo, numero } */
@@ -45,7 +49,12 @@ export function getDateRangePresets(preset) {
   const m = today.getMonth();
   const d = today.getDate();
   const dayOfWeek = today.getDay();
-  const formatDate = (date) => date.toISOString().split('T')[0];
+  const formatDate = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d2 = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d2}`;
+  };
 
   if (preset === 'esta_semana') {
     const diffToMonday = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek;

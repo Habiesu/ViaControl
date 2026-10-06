@@ -475,7 +475,8 @@ function SeccionGastoDirecto({ isOpen, onClose, initialAgenteId, agentes, catalo
     id_gandola: '',
     id_chofer: '',
     monto: '',
-    descripcion: ''
+    descripcion: '',
+    enviarATaller: false
   });
   const [guardando, setGuardando] = useState(false);
 
@@ -488,7 +489,8 @@ function SeccionGastoDirecto({ isOpen, onClose, initialAgenteId, agentes, catalo
         id_propietario: '',
         fecha: getTodayString(),
         monto: '',
-        descripcion: ''
+        descripcion: '',
+        enviarATaller: false
       }));
     }
   }, [isOpen, initialAgenteId, agentes]);
@@ -544,10 +546,10 @@ function SeccionGastoDirecto({ isOpen, onClose, initialAgenteId, agentes, catalo
         fecha: formData.fecha,
         id_agente: formData.id_agente,
         id_propietario: formData.id_propietario || null,
-        id_gandola: formData.id_gandola || null,
-        id_chofer: formData.id_chofer || null,
+        id_gandola: formData.enviarATaller ? (formData.id_gandola || null) : null,
+        id_chofer: formData.enviarATaller ? (formData.id_chofer || null) : null,
         categoria: formData.categoria,
-        tipo: 'Gasto_Empresa',
+        tipo: formData.enviarATaller ? 'Gasto_Empresa' : 'Gasto_Solo_Saldo',
         descripcion: formData.descripcion || `${formData.categoria} (Deducción directa)`,
         monto: Number(formData.monto)
       };
@@ -713,6 +715,33 @@ function SeccionGastoDirecto({ isOpen, onClose, initialAgenteId, agentes, catalo
               value={formData.descripcion}
               onChange={e => setFormData({ ...formData, descripcion: e.target.value })}
             />
+          </div>
+        </div>
+
+        {/* TOGGLE: Enviar también a Gastos de Taller y Flota */}
+        <div style={{
+          marginBottom: '16px',
+          padding: '12px',
+          borderRadius: '8px',
+          background: formData.enviarATaller ? 'rgba(239, 68, 68, 0.08)' : 'var(--surface-container-low)',
+          border: `1px solid ${formData.enviarATaller ? 'rgba(239,68,68,0.5)' : 'var(--outline-variant)'}`,
+          transition: 'all 0.2s ease'
+        }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0, userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              style={{ accentColor: '#ef4444', width: '16px', height: '16px', cursor: 'pointer' }}
+              checked={formData.enviarATaller}
+              onChange={e => setFormData({ ...formData, enviarATaller: e.target.checked })}
+            />
+            <span style={{ fontSize: '13px', fontWeight: 600, color: formData.enviarATaller ? '#f87171' : 'var(--on-surface-variant)' }}>
+              Registrar también en Gastos de Taller y Flota
+            </span>
+          </label>
+          <div style={{ fontSize: '11px', color: 'var(--outline)', marginTop: '4px', paddingLeft: '24px' }}>
+            {formData.enviarATaller
+              ? 'Este gasto aparecerá en el registro de Gastos de Taller y estará vinculado al agente.'
+              : 'Solo se descontará del saldo del agente. No aparecerá en Gastos de Taller y Flota.'}
           </div>
         </div>
 
