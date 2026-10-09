@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { formatUSD, getTodayString, getDateRangePresets } from '../utils/helpers.js';
 const { ipcRenderer } = window.require('electron');
 
@@ -307,6 +307,7 @@ function GastosExtraView({ catalogos, showToast }) {
                 <option value="Repuestos / Cauchos">Repuestos / Cauchos</option>
                 <option value="Cambio de Aceite / Filtros">Cambio de Aceite / Filtros</option>
                 <option value="Tránsito / Permisología">Tránsito / Permisología</option>
+                <option value="Viáticos / Anticipos de Ruta">Viáticos / Anticipos de Ruta</option>
                 <option value="Otros Gastos Operativos">Otros Gastos Operativos</option>
               </select>
             </div>
@@ -460,6 +461,7 @@ function GastosExtraView({ catalogos, showToast }) {
                   <option value="Repuestos / Cauchos">Repuestos / Cauchos</option>
                   <option value="Cambio de Aceite / Filtros">Cambio de Aceite / Filtros</option>
                   <option value="Tránsito / Permisología">Tránsito / Permisología</option>
+                  <option value="Viáticos / Anticipos de Ruta">Viáticos / Anticipos de Ruta</option>
                   <option value="Otros Gastos Operativos">Otros Gastos Operativos</option>
                 </select>
               </div>

@@ -303,6 +303,28 @@ async function initDatabase() {
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_aportes_agente ON Aportes_Propietarios(id_agente)`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_aportes_fecha ON Aportes_Propietarios(fecha)`);
 
+  // ─── MIGRACIÓN DE DATOS v1.3.1 ───────────────────────────────────────────
+  // Reclasifica gastos creados desde "Saldo de Agentes" que quedaron con
+  // tipo='Gasto_Empresa'. Son identificables: tienen id_agente pero SIN
+  // id_gandola ni id_chofer (deducciones directas sin unidad de flota).
+  try {
+    const migResult = await dbRun(`
+      UPDATE Gastos_Extra
+      SET tipo = 'Gasto_Solo_Saldo',
+          sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
+      WHERE tipo = 'Gasto_Empresa'
+        AND id_agente IS NOT NULL
+        AND (id_gandola IS NULL OR id_gandola = '')
+        AND (id_chofer IS NULL OR id_chofer = '')
+        AND (deleted_at IS NULL)
+    `);
+    if (migResult.changes > 0) {
+      console.log(`[DB Migration] ${migResult.changes} gastos de agente reclasificados a Gasto_Solo_Saldo`);
+    }
+  } catch (migErr) {
+    console.warn('[DB Migration] Error en migración de tipos de gasto:', migErr.message);
+  }
+
   const { seedInitialData, importRutasFromExcel } = require('./seeds');
   await seedInitialData();
   await importRutasFromExcel();
