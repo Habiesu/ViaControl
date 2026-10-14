@@ -793,6 +793,15 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
     tipo_movimiento: ''
   });
 
+  const propietariosFiltradosParaMovimientos = useMemo(() => {
+    if (!filtros.id_agente) return todosPropietarios;
+    const ag = agentes.find(a => String(a.id) === String(filtros.id_agente));
+    if (ag && ag.propietarios && ag.propietarios.length > 0) {
+      return ag.propietarios;
+    }
+    return todosPropietarios;
+  }, [filtros.id_agente, agentes, todosPropietarios]);
+
   const cargarAgentes = useCallback(async () => {
     try {
       const res = await ipcRenderer.invoke('saldos:obtenerAgentes');
@@ -821,14 +830,15 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
   const cargarMovimientos = useCallback(async () => {
     setLoadingMovimientos(true);
     try {
-      const res = await ipcRenderer.invoke('saldos:obtenerMovimientos', filtros);
+      const { tipo_movimiento, ...filtrosApi } = filtros;
+      const res = await ipcRenderer.invoke('saldos:obtenerMovimientos', filtrosApi);
       if (res && res.ok) setMovimientos(res.data || []);
     } catch (e) {
       if (mostrarToast) mostrarToast('Error al obtener movimientos', 'error');
     } finally {
       setLoadingMovimientos(false);
     }
-  }, [filtros, mostrarToast]);
+  }, [filtros.id_agente, filtros.id_propietario, filtros.fecha_desde, filtros.fecha_hasta, mostrarToast]);
 
   useEffect(() => {
     cargarResumen();
@@ -905,21 +915,54 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
     setShowAgenteForm(true);
   };
 
+  const cambiarVista = (nuevaVista) => {
+    if (vistaActiva === 'movimientos' && nuevaVista !== 'movimientos') {
+      // Restablecer filtros de fecha al salir de movimientos para restaurar totales
+      setFiltros(prev => ({ ...prev, fecha_desde: '', fecha_hasta: '' }));
+    }
+    setVistaActiva(nuevaVista);
+  };
+
   const verMovimientosAgente = (idAgente) => {
-    setFiltros(prev => ({ ...prev, id_agente: idAgente, id_propietario: '' }));
+    setFiltros(prev => ({ ...prev, id_agente: idAgente, id_propietario: '', fecha_desde: '', fecha_hasta: '' }));
     setVistaActiva('movimientos');
   };
 
-  // KPIs Globales memoizados
-  const { totalGlobalEntregado, totalGlobalGastos, saldoGlobalNeto } = useMemo(() => {
+  // Movimientos visibles en tabla (filtrados por tipo si el usuario lo selecciona)
+  const movimientosVisibles = useMemo(() => {
+    if (!filtros.tipo_movimiento) return movimientos;
+    return movimientos.filter(m => m.tipo_movimiento === filtros.tipo_movimiento);
+  }, [movimientos, filtros.tipo_movimiento]);
+
+  // ¿Está filtrando por fecha en el Historial de Movimientos?
+  const filtrandoFechaEnMovimientos = vistaActiva === 'movimientos' && Boolean(filtros.fecha_desde || filtros.fecha_hasta);
+
+  // KPIs Globales / Período memoizados
+  const { totalGlobalEntregado, totalGlobalGastos, saldoGlobalNeto, esPeriodoFiltrado } = useMemo(() => {
+    if (filtrandoFechaEnMovimientos) {
+      const entregado = movimientos
+        .filter(m => m.tipo_movimiento === 'INGRESO')
+        .reduce((sum, m) => sum + (Number(m.monto) || 0), 0);
+      const gastos = movimientos
+        .filter(m => m.tipo_movimiento === 'EGRESO')
+        .reduce((sum, m) => sum + (Number(m.monto) || 0), 0);
+      return {
+        totalGlobalEntregado: entregado,
+        totalGlobalGastos: gastos,
+        saldoGlobalNeto: entregado - gastos,
+        esPeriodoFiltrado: true
+      };
+    }
+
     const entregado = resumen.reduce((sum, r) => sum + (r.total_entregado || 0), 0);
     const gastos = resumen.reduce((sum, r) => sum + (r.total_gastos || 0), 0);
     return {
       totalGlobalEntregado: entregado,
       totalGlobalGastos: gastos,
-      saldoGlobalNeto: entregado - gastos
+      saldoGlobalNeto: entregado - gastos,
+      esPeriodoFiltrado: false
     };
-  }, [resumen]);
+  }, [resumen, movimientos, filtrandoFechaEnMovimientos]);
 
   // Imprimir reporte / Estado de cuenta
   const handlePrint = () => {
@@ -938,7 +981,7 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
       </tr>
     `).join('');
 
-    const rowsMovs = movimientos.map(m => `
+    const rowsMovs = movimientosVisibles.map(m => `
       <tr>
         <td style="text-align:center">${m.fecha}</td>
         <td><strong>${m.agente_nombre}</strong></td>
@@ -996,7 +1039,7 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
     <tbody>${rowsResumen}</tbody>
   </table>
 
-  ${movimientos.length > 0 ? `
+  ${movimientosVisibles.length > 0 ? `
     <h3>📋 Detalle de Movimientos Recientes</h3>
     <table>
       <thead>
@@ -1023,96 +1066,98 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
   return (
     <div>
       {/* TARJETAS DE KPIS SUPERIORES */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px', marginBottom: '8px' }}>
         <div style={{
           background: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.35)',
-          borderRadius: '10px', padding: '14px 18px', display: 'flex', flexDirection: 'column'
+          borderRadius: '8px', padding: '8px 14px', display: 'flex', flexDirection: 'column'
         }}>
           <span style={{ fontSize: '11px', color: 'var(--on-surface)', opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Total Fondos Entregados (+)
+            {esPeriodoFiltrado ? 'Fondos Entregados (Período)' : 'Total Fondos Entregados (+)'}
           </span>
-          <span style={{ fontSize: '24px', fontWeight: 700, color: '#60a5fa', marginTop: '4px' }}>
+          <span style={{ fontSize: '20px', fontWeight: 700, color: '#60a5fa', marginTop: '2px' }}>
             {formatUSD(totalGlobalEntregado)}
           </span>
-          <span style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginTop: '2px' }}>
-            Aportes entregados por los agentes
+          <span style={{ fontSize: '10px', color: 'var(--on-surface-variant)', marginTop: '1px' }}>
+            {esPeriodoFiltrado ? 'Aportes en el rango filtrado' : 'Aportes entregados por los agentes'}
           </span>
         </div>
 
         <div style={{
           background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.35)',
-          borderRadius: '10px', padding: '14px 18px', display: 'flex', flexDirection: 'column'
+          borderRadius: '8px', padding: '8px 14px', display: 'flex', flexDirection: 'column'
         }}>
           <span style={{ fontSize: '11px', color: 'var(--on-surface)', opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Total Gastos Descontados (-)
+            {esPeriodoFiltrado ? 'Gastos Descontados (Período)' : 'Total Gastos Descontados (-)'}
           </span>
-          <span style={{ fontSize: '24px', fontWeight: 700, color: '#f87171', marginTop: '4px' }}>
+          <span style={{ fontSize: '20px', fontWeight: 700, color: '#f87171', marginTop: '2px' }}>
             {formatUSD(totalGlobalGastos)}
           </span>
-          <span style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginTop: '2px' }}>
-            Gastos de propietarios y unidades
+          <span style={{ fontSize: '10px', color: 'var(--on-surface-variant)', marginTop: '1px' }}>
+            {esPeriodoFiltrado ? 'Deducciones en el rango filtrado' : 'Gastos de propietarios y unidades'}
           </span>
         </div>
 
         <div style={{
           background: saldoGlobalNeto >= 0 ? 'rgba(34, 197, 94, 0.14)' : 'rgba(239, 68, 68, 0.14)',
           border: `1px solid ${saldoGlobalNeto >= 0 ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
-          borderRadius: '10px', padding: '14px 18px', display: 'flex', flexDirection: 'column'
+          borderRadius: '8px', padding: '8px 14px', display: 'flex', flexDirection: 'column'
         }}>
           <span style={{ fontSize: '11px', color: 'var(--on-surface)', opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Saldo Global Disponible
+            {esPeriodoFiltrado ? 'Saldo Neto del Período' : 'Saldo Global de Agentes'}
           </span>
           <span style={{
-            fontSize: '24px', fontWeight: 700,
-            color: saldoGlobalNeto >= 0 ? '#4ade80' : '#f87171', marginTop: '4px'
+            fontSize: '20px', fontWeight: 700,
+            color: saldoGlobalNeto >= 0 ? '#4ade80' : '#f87171', marginTop: '2px'
           }}>
             {formatUSD(saldoGlobalNeto)}
           </span>
-          <span style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginTop: '2px' }}>
-            {saldoGlobalNeto >= 0 ? 'Saldo neto a favor' : 'Déficit / Saldo en contra'}
+          <span style={{ fontSize: '10px', color: 'var(--on-surface-variant)', marginTop: '1px' }}>
+            {esPeriodoFiltrado
+              ? (saldoGlobalNeto >= 0 ? 'Balance neto en período' : 'Déficit en período')
+              : (saldoGlobalNeto >= 0 ? 'Saldo neto a favor' : 'Déficit / Saldo en contra')}
           </span>
         </div>
 
         <div style={{
-          background: 'var(--surface-variant)', borderRadius: '10px', padding: '14px 18px',
+          background: 'var(--surface-variant)', borderRadius: '8px', padding: '8px 14px',
           display: 'flex', flexDirection: 'column', border: '1px solid var(--outline-variant)'
         }}>
           <span style={{ fontSize: '11px', color: 'var(--on-surface)', opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             Agentes Registrados
           </span>
-          <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--on-surface)', marginTop: '4px' }}>
+          <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--on-surface)', marginTop: '2px' }}>
             {resumen.length}
           </span>
-          <span style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginTop: '2px' }}>
+          <span style={{ fontSize: '10px', color: 'var(--on-surface-variant)', marginTop: '1px' }}>
             Cuentas financieras activas
           </span>
         </div>
       </div>
 
       {/* BARRA DE HERRAMIENTAS Y PESTAÑAS */}
-      <div className="card" style={{ marginBottom: '16px', padding: '12px 18px' }}>
+      <div className="card" style={{ marginBottom: '8px', padding: '8px 14px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button
               className={`btn btn-sm ${vistaActiva === 'resumen' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setVistaActiva('resumen')}
+              onClick={() => cambiarVista('resumen')}
             >
               <span className="material-symbols-outlined" style={{ fontSize: '17px' }}>table_chart</span>
               Resumen por Agente
             </button>
             <button
               className={`btn btn-sm ${vistaActiva === 'agentes' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setVistaActiva('agentes')}
+              onClick={() => cambiarVista('agentes')}
             >
               <span className="material-symbols-outlined" style={{ fontSize: '17px' }}>group</span>
               Gestión de Agentes ({agentes.length})
             </button>
             <button
               className={`btn btn-sm ${vistaActiva === 'movimientos' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setVistaActiva('movimientos')}
+              onClick={() => cambiarVista('movimientos')}
             >
               <span className="material-symbols-outlined" style={{ fontSize: '17px' }}>receipt_long</span>
-              Historial de Movimientos ({movimientos.length})
+              Historial de Movimientos ({movimientosVisibles.length})
             </button>
           </div>
 
@@ -1231,7 +1276,7 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
           )}
 
           {resumen.length > 0 && (
-            <div className="table-container" style={{ maxHeight: '560px', overflowY: 'auto' }}>
+            <div className="table-container" style={{ height: 'calc(100vh - 315px)', minHeight: '220px', overflowY: 'auto' }}>
               <table className="data-table">
                 <thead>
                   <tr>
@@ -1342,7 +1387,7 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
 
       {/* VISTA 2: GESTIÓN DE AGENTES */}
       {vistaActiva === 'agentes' && (
-        <div className="table-container" style={{ maxHeight: '560px', overflowY: 'auto' }}>
+        <div className="table-container" style={{ height: 'calc(100vh - 315px)', minHeight: '220px', overflowY: 'auto' }}>
           <table className="data-table">
             <thead>
               <tr>
@@ -1410,13 +1455,16 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
       {/* VISTA 3: HISTORIAL DE MOVIMIENTOS */}
       {vistaActiva === 'movimientos' && (
         <div>
-          <div className="card" style={{ marginBottom: '14px', padding: '12px 18px' }}>
+          <div className="card" style={{ marginBottom: '8px', padding: '8px 14px' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
               <div style={{ minWidth: '180px' }}>
                 <select
                   className="form-select"
                   value={filtros.id_agente}
-                  onChange={e => setFiltros({ ...filtros, id_agente: e.target.value })}
+                  onChange={e => {
+                    const nuevoAgente = e.target.value;
+                    setFiltros(prev => ({ ...prev, id_agente: nuevoAgente, id_propietario: '' }));
+                  }}
                 >
                   <option value="">Todos los agentes</option>
                   {agentes.map(a => (
@@ -1432,7 +1480,7 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
                   onChange={e => setFiltros({ ...filtros, id_propietario: e.target.value })}
                 >
                   <option value="">Todos los propietarios</option>
-                  {todosPropietarios.map(p => (
+                  {propietariosFiltradosParaMovimientos.map(p => (
                     <option key={p.id} value={p.id}>{p.nombre}</option>
                   ))}
                 </select>
@@ -1477,7 +1525,7 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
             </div>
           </div>
 
-          <div className="table-container" style={{ maxHeight: '520px', overflowY: 'auto' }}>
+          <div className="table-container" style={{ height: 'calc(100vh - 380px)', minHeight: '220px', overflowY: 'auto' }}>
             <table className="data-table">
               <thead>
                 <tr>
@@ -1499,13 +1547,13 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
                       Cargando movimientos...
                     </td>
                   </tr>
-                ) : movimientos.length === 0 ? (
+                ) : movimientosVisibles.length === 0 ? (
                   <tr>
                     <td colSpan="8" style={{ textAlign: 'center', padding: '36px', color: 'var(--on-surface-variant)' }}>
                       No se encontraron movimientos con los filtros seleccionados.
                     </td>
                   </tr>
-                ) : movimientos.map(m => {
+                ) : movimientosVisibles.map(m => {
                   const isIngreso = m.tipo_movimiento === 'INGRESO';
                   return (
                     <tr

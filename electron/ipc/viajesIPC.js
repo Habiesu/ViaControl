@@ -120,7 +120,7 @@ function registerViajesIPC() {
 
   ipcMain.handle('viajes:listar', async (event, filtros = {}) => {
     try {
-      const { fecha_desde, fecha_hasta, id_chofer, id_gandola, id_propietario, busqueda } = filtros;
+      const { fecha_desde, fecha_hasta, id_chofer, id_gandola, id_propietario, busqueda, ruta, origen } = filtros;
       let sql = "SELECT * FROM Viajes WHERE (deleted_at IS NULL)";
       const params = [];
 
@@ -143,6 +143,25 @@ function registerViajesIPC() {
       if (id_propietario) {
         sql += " AND id_propietario = ?";
         params.push(id_propietario);
+      }
+      const origenFiltro = (origen || ruta || '').trim();
+      if (origenFiltro) {
+        if (origenFiltro.includes('|||')) {
+          const [rOrig] = origenFiltro.split('|||');
+          if (rOrig && rOrig.trim()) {
+            sql += " AND UPPER(TRIM(origen)) = ?";
+            params.push(rOrig.trim().toUpperCase());
+          }
+        } else if (origenFiltro.includes(' ➔ ')) {
+          const [rOrig] = origenFiltro.split(' ➔ ');
+          if (rOrig && rOrig.trim()) {
+            sql += " AND UPPER(TRIM(origen)) = ?";
+            params.push(rOrig.trim().toUpperCase());
+          }
+        } else {
+          sql += " AND UPPER(TRIM(origen)) = ?";
+          params.push(origenFiltro.toUpperCase());
+        }
       }
       if (busqueda && busqueda.trim()) {
         const q = `%${busqueda.trim()}%`;

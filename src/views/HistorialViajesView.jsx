@@ -241,7 +241,11 @@ function HistorialViajesView({ catalogos, onActualizarCatalogos, showToast }) {
       </div>
 
       {/* TABLA DE VIAJES */}
-      <div className="table-container" style={{ maxHeight: "540px", overflowY: "auto" }}>
+      <div className="table-container" style={{
+        height: 'calc(100vh - 360px)',
+        minHeight: '280px',
+        overflowY: 'auto'
+      }}>
         <table className="data-table">
           <thead>
             <tr>

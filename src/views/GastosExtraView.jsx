@@ -85,34 +85,76 @@ function GastosExtraView({ catalogos, showToast }) {
     return map;
   }, [agentes]);
 
+  const categoriasDisponibles = useMemo(() => {
+    const defaultCats = [
+      'Mantenimiento / Taller',
+      'Repuestos / Cauchos',
+      'Cambio de Aceite / Filtros',
+      'Tránsito / Permisología',
+      'Viáticos Extras',
+      'Viáticos / Anticipos de Ruta',
+      'Anticipo a Chofer',
+      'Otros Gastos Operativos'
+    ];
+    const fromGastos = (gastos || []).map(g => g.categoria).filter(Boolean);
+    return Array.from(new Set([...defaultCats, ...fromGastos]));
+  }, [gastos]);
+
   const cambiarPresetFecha = (preset) => {
     setPresetFecha(preset);
-    const presets = getDateRangePresets();
     if (preset === 'este-mes') {
-      setFechaDesde(presets.esteMes.desde);
-      setFechaHasta(presets.esteMes.hasta);
+      const r = getDateRangePresets('este-mes');
+      setFechaDesde(r.desde || r.inicio);
+      setFechaHasta(r.hasta || r.fin);
     } else if (preset === 'mes-anterior') {
-      setFechaDesde(presets.mesAnterior.desde);
-      setFechaHasta(presets.mesAnterior.hasta);
+      const r = getDateRangePresets('mes-anterior');
+      setFechaDesde(r.desde || r.inicio);
+      setFechaHasta(r.hasta || r.fin);
     } else if (preset === 'todo') {
       setFechaDesde('');
       setFechaHasta('');
     }
   };
 
+  const hayFiltrosActivos = !!(
+    filtroGandola ||
+    filtroCategoria ||
+    filtroAgente ||
+    filtroBusqueda ||
+    fechaDesde ||
+    fechaHasta ||
+    presetFecha !== 'todo'
+  );
+
+  const limpiarFiltros = () => {
+    setFiltroGandola('');
+    setFiltroCategoria('');
+    setFiltroAgente('');
+    setFiltroBusqueda('');
+    cambiarPresetFecha('todo');
+  };
+
   // Filtrado reactivo en memoria
   const gastosFiltrados = useMemo(() => {
     return gastos.filter(g => {
-      // Filtro por Gandola
+      // Filtro por Gandola / Unidad
       if (filtroGandola === '__GENERAL__') {
         if (g.id_gandola) return false;
-      } else if (filtroGandola && String(g.id_gandola) !== String(filtroGandola)) {
-        return false;
+      } else if (filtroGandola) {
+        const valSel = String(filtroGandola).trim().toLowerCase();
+        const gVal = String(g.id_gandola || '').trim().toLowerCase();
+        const gandolaCatalog = (catalogos?.gandolas || []).find(
+          cg => String(cg.placa).trim().toLowerCase() === valSel || String(cg.id) === valSel
+        );
+        const match = gVal === valSel || (gandolaCatalog && (gVal === String(gandolaCatalog.placa).trim().toLowerCase() || gVal === String(gandolaCatalog.id)));
+        if (!match) return false;
       }
 
       // Filtro por Categoría
-      if (filtroCategoria && g.categoria !== filtroCategoria) {
-        return false;
+      if (filtroCategoria) {
+        if (String(g.categoria || '').trim().toLowerCase() !== String(filtroCategoria).trim().toLowerCase()) {
+          return false;
+        }
       }
 
       // Filtro por Agente / Destino
@@ -120,8 +162,10 @@ function GastosExtraView({ catalogos, showToast }) {
         if (g.id_agente) return false;
       } else if (filtroAgente === '__CON_AGENTE__') {
         if (!g.id_agente) return false;
-      } else if (filtroAgente && String(g.id_agente) !== String(filtroAgente)) {
-        return false;
+      } else if (filtroAgente) {
+        if (String(g.id_agente) !== String(filtroAgente)) {
+          return false;
+        }
       }
 
       // Filtro Búsqueda de Texto
@@ -131,18 +175,32 @@ function GastosExtraView({ catalogos, showToast }) {
         const cat = (g.categoria || '').toLowerCase();
         const unit = (g.id_gandola || '').toLowerCase();
         const agentName = (agentMap[g.id_agente] || '').toLowerCase();
-        if (!desc.includes(q) && !cat.includes(q) && !unit.includes(q) && !agentName.includes(q)) {
+        const montoStr = String(g.monto || '');
+        const foundUnit = (catalogos?.gandolas || []).find(
+          u => String(u.placa).trim().toLowerCase() === unit || String(u.id) === unit
+        );
+        const unitLabel = foundUnit ? formatGandolaLabel(foundUnit).toLowerCase() : '';
+
+        if (
+          !desc.includes(q) &&
+          !cat.includes(q) &&
+          !unit.includes(q) &&
+          !agentName.includes(q) &&
+          !montoStr.includes(q) &&
+          !unitLabel.includes(q)
+        ) {
           return false;
         }
       }
 
-      // Filtro Fechas
-      if (fechaDesde && g.fecha < fechaDesde) return false;
-      if (fechaHasta && g.fecha > fechaHasta) return false;
+      // Filtro Fechas (YYYY-MM-DD)
+      const fechaGasto = String(g.fecha || '').slice(0, 10);
+      if (fechaDesde && fechaGasto && fechaGasto < fechaDesde) return false;
+      if (fechaHasta && fechaGasto && fechaGasto > fechaHasta) return false;
 
       return true;
     });
-  }, [gastos, filtroGandola, filtroCategoria, filtroAgente, filtroBusqueda, fechaDesde, fechaHasta, agentMap]);
+  }, [gastos, filtroGandola, filtroCategoria, filtroAgente, filtroBusqueda, fechaDesde, fechaHasta, agentMap, catalogos?.gandolas]);
 
   // Cálculos dinámicos KPIs
   const stats = useMemo(() => {
@@ -307,6 +365,7 @@ function GastosExtraView({ catalogos, showToast }) {
                 <option value="Repuestos / Cauchos">Repuestos / Cauchos</option>
                 <option value="Cambio de Aceite / Filtros">Cambio de Aceite / Filtros</option>
                 <option value="Tránsito / Permisología">Tránsito / Permisología</option>
+                <option value="Viáticos Extras">Viáticos Extras</option>
                 <option value="Viáticos / Anticipos de Ruta">Viáticos / Anticipos de Ruta</option>
                 <option value="Otros Gastos Operativos">Otros Gastos Operativos</option>
               </select>
@@ -457,12 +516,9 @@ function GastosExtraView({ catalogos, showToast }) {
                   onChange={e => setFiltroCategoria(e.target.value)}
                 >
                   <option value="">Todas las Categorías</option>
-                  <option value="Mantenimiento / Taller">Mantenimiento / Taller</option>
-                  <option value="Repuestos / Cauchos">Repuestos / Cauchos</option>
-                  <option value="Cambio de Aceite / Filtros">Cambio de Aceite / Filtros</option>
-                  <option value="Tránsito / Permisología">Tránsito / Permisología</option>
-                  <option value="Viáticos / Anticipos de Ruta">Viáticos / Anticipos de Ruta</option>
-                  <option value="Otros Gastos Operativos">Otros Gastos Operativos</option>
+                  {categoriasDisponibles.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
                 </select>
               </div>
 
@@ -490,18 +546,31 @@ function GastosExtraView({ catalogos, showToast }) {
               
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div className="radio-tabs" style={{ borderRadius: '6px', overflow: 'hidden' }}>
-                  <div className={`radio-tab ${presetFecha === 'todo' ? 'active' : ''}`} style={{ padding: '0 12px', fontSize: '11px' }} onClick={() => cambiarPresetFecha('todo')}>Todo</div>
-                  <div className={`radio-tab ${presetFecha === 'este-mes' ? 'active' : ''}`} style={{ padding: '0 12px', fontSize: '11px' }} onClick={() => cambiarPresetFecha('este-mes')}>Este Mes</div>
-                  <div className={`radio-tab ${presetFecha === 'mes-anterior' ? 'active' : ''}`} style={{ padding: '0 12px', fontSize: '11px' }} onClick={() => cambiarPresetFecha('mes-anterior')}>Mes Ant.</div>
-                  <div className={`radio-tab ${presetFecha === 'personalizado' ? 'active' : ''}`} style={{ padding: '0 12px', fontSize: '11px' }} onClick={() => setPresetFecha('personalizado')}>Pers.</div>
+                  <div className={`radio-tab ${presetFecha === 'todo' ? 'active' : ''}`} style={{ padding: '0 12px', fontSize: '11px', cursor: 'pointer' }} onClick={() => cambiarPresetFecha('todo')}>Todo</div>
+                  <div className={`radio-tab ${presetFecha === 'este-mes' ? 'active' : ''}`} style={{ padding: '0 12px', fontSize: '11px', cursor: 'pointer' }} onClick={() => cambiarPresetFecha('este-mes')}>Este Mes</div>
+                  <div className={`radio-tab ${presetFecha === 'mes-anterior' ? 'active' : ''}`} style={{ padding: '0 12px', fontSize: '11px', cursor: 'pointer' }} onClick={() => cambiarPresetFecha('mes-anterior')}>Mes Ant.</div>
+                  <div className={`radio-tab ${presetFecha === 'personalizado' ? 'active' : ''}`} style={{ padding: '0 12px', fontSize: '11px', cursor: 'pointer' }} onClick={() => setPresetFecha('personalizado')}>Pers.</div>
                 </div>
 
                 {presetFecha === 'personalizado' && (
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    <input type="date" className="form-input" style={{ width: '130px' }} value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} />
+                    <input type="date" className="form-input" style={{ width: '130px' }} value={fechaDesde} onChange={e => { setPresetFecha('personalizado'); setFechaDesde(e.target.value); }} />
                     <span style={{ color: 'var(--outline)' }}>-</span>
-                    <input type="date" className="form-input" style={{ width: '130px' }} value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} />
+                    <input type="date" className="form-input" style={{ width: '130px' }} value={fechaHasta} onChange={e => { setPresetFecha('personalizado'); setFechaHasta(e.target.value); }} />
                   </div>
+                )}
+
+                {hayFiltrosActivos && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={limpiarFiltros}
+                    title="Restablecer todos los filtros"
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', padding: '4px 10px', height: '28px' }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>restart_alt</span>
+                    Restablecer
+                  </button>
                 )}
               </div>
 

@@ -48,6 +48,16 @@ function registerGastosIPC() {
       const descVal = (descripcion && descripcion.trim()) ? descripcion.trim() : (categoria || 'Gasto de mantenimiento');
       const now = new Date().toISOString();
 
+      let idPropFinal = id_propietario || null;
+      if (!idPropFinal && id_chofer) {
+        const choferDb = await dbGet("SELECT id_propietario FROM Choferes WHERE nombre = ? OR id = ?", [id_chofer, id_chofer]);
+        if (choferDb && choferDb.id_propietario) idPropFinal = choferDb.id_propietario;
+      }
+      if (!idPropFinal && id_gandola) {
+        const gandolaDb = await dbGet("SELECT id_propietario FROM Gandolas WHERE placa = ? OR id = ?", [id_gandola, id_gandola]);
+        if (gandolaDb && gandolaDb.id_propietario) idPropFinal = gandolaDb.id_propietario;
+      }
+
       if (id) {
         await dbRun(`
           UPDATE Gastos_Extra SET
@@ -56,7 +66,7 @@ function registerGastosIPC() {
             updated_at = ?,
             sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
           WHERE id = ?
-        `, [fecha, id_chofer || null, id_gandola || null, id_viaje || null, id_propietario || null, id_agente ? Number(id_agente) : null, categoria || 'General', tipoVal, descVal, Number(monto), now, id]);
+        `, [fecha, id_chofer || null, id_gandola || null, id_viaje || null, idPropFinal, id_agente ? Number(id_agente) : null, categoria || 'General', tipoVal, descVal, Number(monto), now, id]);
         return { ok: true, mensaje: 'Gasto extra actualizado' };
       } else {
         const uuid = crypto.randomUUID();
@@ -65,7 +75,7 @@ function registerGastosIPC() {
             uuid, fecha, id_chofer, id_gandola, id_viaje, id_propietario, id_agente,
             categoria, tipo, descripcion, monto, updated_at, sync_status
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_insert')
-        `, [uuid, fecha, id_chofer || null, id_gandola || null, id_viaje || null, id_propietario || null, id_agente ? Number(id_agente) : null, categoria || 'General', tipoVal, descVal, Number(monto), now]);
+        `, [uuid, fecha, id_chofer || null, id_gandola || null, id_viaje || null, idPropFinal, id_agente ? Number(id_agente) : null, categoria || 'General', tipoVal, descVal, Number(monto), now]);
         return { ok: true, id: res.lastID, uuid, mensaje: 'Gasto extra registrado' };
       }
     } catch (error) {

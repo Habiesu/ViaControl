@@ -48,7 +48,7 @@ function AnalisisMensualView({ catalogos, showToast }) {
 
   return (
     <div>
-      <div className="card" style={{ marginBottom: '24px', padding: '16px 20px' }}>
+      <div className="card" style={{ marginBottom: '10px', padding: '12px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
             <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
@@ -153,7 +153,7 @@ function AnalisisMensualView({ catalogos, showToast }) {
 
       {analisis && (
         <div>
-          <div className="kpi-grid">
+          <div className="kpi-grid" style={{ marginBottom: '8px' }}>
             <div className="kpi-card">
               <div className="kpi-icon-box kpi-icon-blue"><span className="material-symbols-outlined" style={{ fontSize: "18px" }}>attach_money</span></div>
               <div className="kpi-data">
@@ -195,15 +195,19 @@ function AnalisisMensualView({ catalogos, showToast }) {
             </div>
           </div>
 
-          <div className="card">
-            <div className="card-header">
+          <div className="card" style={{ padding: '12px 16px' }}>
+            <div className="card-header" style={{ marginBottom: '8px' }}>
               <div>
                 <div className="card-title"><span className="material-symbols-outlined" style={{ fontSize: "16px" }}>local_shipping</span> Ranking de Rendimiento y Margen Operativo por Unidad</div>
                 <div className="card-subtitle">Segregación completa de costes de combustible, viáticos, pagos y taller.</div>
               </div>
             </div>
 
-            <div className="table-container scrollable-table" style={{ maxHeight: '65vh' }}>
+            <div className="table-container scrollable-table" style={{
+              height: 'calc(100vh - 385px)',
+              minHeight: '200px',
+              overflowY: 'auto'
+            }}>
               <table className="data-table">
                 <thead>
                   <tr>

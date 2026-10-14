@@ -5,23 +5,30 @@ description: >-
   evitar desbordamiento de contexto y ejecutar cambios grandes de forma limpia y por partes.
 ---
 
-# Skill: Token Saver (Estrategia de Optimización de Tokens)
+# Skill: Token Saver
 
-Esta habilidad le enseña al agente a trabajar con el máximo ahorro de tokens en cualquier desarrollo o refactorización.
+## Reglas de Respuesta (SIEMPRE aplicar)
 
-## Estrategia de Trabajo
+1. **Respuestas cortas por defecto**: Máximo 5 líneas de texto libre. Sin explicaciones redundantes ni re-sintetizar lo que ya se hizo.
+2. **Sin bloques de código en respuesta** a menos que el usuario pida ver el código explícitamente.
+3. **Resumen ejecutivo post-edición**: Solo listar qué archivos se tocaron y el efecto neto. Ejemplo: `✅ database.js — migración añadida`.
+4. **No repetir el plan antes de ejecutarlo**: Ejecutar directamente y reportar resultado.
+5. **Tablas solo si hay 3+ ítems comparables**. Evitar tablas de 1-2 filas.
 
-1. **Descomposición Modular de Tareas**:
-   - Cuando una solicitud abarque múltiples componentes, módulos o vistas, dividir el trabajo en iteraciones pequeñas.
-   - Completar un módulo a la vez, verificar sintaxis/correcto funcionamiento, y reportar avances muy brevemente.
+## Estrategia de Edición
 
-2. **Uso de Scripts Auxiliares (`scratch/`)**:
-   - Para transformaciones de código masivas (ej. reemplazo de iconos, limpieza de textos, refactorización de estilos), ejecutar scripts rápidos de Node.js creados en `scratch/` que operen sobre el disco.
-   - Esto evita transmitir miles de líneas de código dentro del contexto del modelo.
+1. **Modular**: Un archivo/módulo por turno. Verificar sintaxis antes de continuar.
+2. **Scripts en `scratch/`**: Para transformaciones masivas (>50 líneas cambiadas), crear un script Node.js temporal en lugar de enviar bloques enormes de texto.
+3. **`multi_replace_file_content`**: Preferir sobre reemplazos de archivo completo. Apuntar a rangos de ≤30 líneas por chunk.
+4. **Leer antes de editar**: Siempre `grep_search` o `view_file` del rango exacto antes de hacer un reemplazo.
 
-3. **Ediciones de Archivo Focalizadas**:
-   - Limitar `replace_file_content` a bloques pequeños y específicos.
-   - Evitar reemplazar archivos completos cuando solo cambian partes aisladas.
+## Estrategia de Investigación
 
-4. **Comunicación Ejecutiva**:
-   - Mantener las respuestas cortas, estructuradas en viñetas y centradas en los resultados tangibles.
+- Usar `grep_search` antes de `view_file` para localizar exactamente qué líneas leer.
+- Leer rangos pequeños (≤80 líneas) en lugar de archivos completos.
+- Si el archivo es grande, leer solo la función/sección relevante.
+
+## Comunicación Ejecutiva
+
+- ✅ Correcto: `Fix aplicado en saldosIPC.js — sort usa real_id numérico.`
+- ❌ Incorrecto: Párrafos explicando qué hace el sort, por qué es mejor, y re-mostrando el código.

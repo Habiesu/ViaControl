@@ -161,6 +161,14 @@ function registerSaldosIPC() {
       const propMap = {};
       propietarios.forEach(p => { propMap[p.id] = p.nombre; });
 
+      const gandolas = await dbAll("SELECT placa, id_propietario FROM Gandolas WHERE (deleted_at IS NULL)");
+      const gandolaPropMap = {};
+      gandolas.forEach(g => { if (g.placa && g.id_propietario) gandolaPropMap[g.placa] = g.id_propietario; });
+
+      const choferes = await dbAll("SELECT nombre, id_propietario FROM Choferes WHERE (deleted_at IS NULL)");
+      const choferPropMap = {};
+      choferes.forEach(c => { if (c.nombre && c.id_propietario) choferPropMap[c.nombre] = c.id_propietario; });
+
       let movimientos = [];
 
       // 1. Obtener Aportes Manuales (Ingresos)
@@ -217,8 +225,8 @@ function registerSaldosIPC() {
           gastosParams.push(id_agente);
         }
         if (id_propietario) {
-          gastosSql += " AND id_propietario = ?";
-          gastosParams.push(id_propietario);
+          gastosSql += " AND (id_propietario = ? OR id_gandola IN (SELECT placa FROM Gandolas WHERE id_propietario = ?) OR id_chofer IN (SELECT nombre FROM Choferes WHERE id_propietario = ?))";
+          gastosParams.push(id_propietario, id_propietario, id_propietario);
         }
         if (fecha_desde) {
           gastosSql += " AND fecha >= ?";
@@ -235,6 +243,9 @@ function registerSaldosIPC() {
           if (g.id_gandola) detalle = `Gandola: ${g.id_gandola}`;
           else if (g.id_chofer) detalle = `Chofer: ${g.id_chofer}`;
 
+          const propId = g.id_propietario || (g.id_gandola ? gandolaPropMap[g.id_gandola] : null) || (g.id_chofer ? choferPropMap[g.id_chofer] : null);
+          const propNombre = propId ? (propMap[propId] || 'Propietario #' + propId) : '—';
+
           movimientos.push({
             id: `gasto-${g.id}`,
             real_id: g.id,
@@ -244,8 +255,8 @@ function registerSaldosIPC() {
             fecha: g.fecha,
             id_agente: g.id_agente,
             agente_nombre: agentMap[g.id_agente] || (g.id_agente ? 'Agente #' + g.id_agente : 'Gasto General'),
-            id_propietario: g.id_propietario,
-            propietario_nombre: g.id_propietario ? (propMap[g.id_propietario] || 'Propietario #' + g.id_propietario) : '—',
+            id_propietario: propId,
+            propietario_nombre: propNombre,
             concepto: g.descripcion || g.categoria || 'Gasto / Viático manual',
             monto: Number(g.monto),
             metodo_pago: 'Gasto / Débito',

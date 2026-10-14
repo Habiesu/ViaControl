@@ -228,7 +228,11 @@ function RutasView({ catalogos, onActualizar, showToast }) {
             </div>
           </div>
 
-          <div className="table-container scrollable-table" style={{ maxHeight: '65vh' }}>
+          <div className="table-container scrollable-table" style={{
+            height: 'calc(100vh - 280px)',
+            minHeight: '280px',
+            overflowY: 'auto'
+          }}>
             <table className="data-table">
               <thead>
                 <tr>

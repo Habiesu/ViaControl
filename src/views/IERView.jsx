@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 const { ipcRenderer } = window.require('electron');
 
 function formatGandolaLabel(g) {
@@ -21,26 +21,43 @@ function IERView({ catalogos, showToast }) {
     id_propietario: '',
     id_chofer: '',
     id_gandola: '',
+    ruta: '',
     fecha_desde: '',
     fecha_hasta: '',
     entregado: '',   // '' | '1' | '0'
     pagado: '',      // '' | '1' | '0'
   });
 
+  const origenesDisponibles = useMemo(() => {
+    const set = new Set();
+    (catalogos.origenes || []).forEach(o => { if (o && o.trim()) set.add(o.trim()); });
+    (catalogos.rutas || []).forEach(r => { if (r.origen && r.origen.trim()) set.add(r.origen.trim()); });
+    (catalogos.viajes || []).forEach(v => { if (v.origen && v.origen.trim()) set.add(v.origen.trim()); });
+    if (set.size === 0) {
+      ['Guanta', 'La Guaira', 'Puerto Cabello'].forEach(o => set.add(o));
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [catalogos.origenes, catalogos.rutas]);
+
   const cargarViajes = useCallback(async () => {
     setLoading(true);
     try {
-      // Reutilizamos viajes:listar y filtramos entregado/pagado en frontend
+      // Reutilizamos viajes:listar y filtramos por origen/salida
       const res = await ipcRenderer.invoke('viajes:listar', {
         busqueda: filtros.busqueda,
         id_propietario: filtros.id_propietario,
         id_chofer: filtros.id_chofer,
         id_gandola: filtros.id_gandola,
+        origen: filtros.ruta,
         fecha_desde: filtros.fecha_desde,
         fecha_hasta: filtros.fecha_hasta,
       });
       if (res.ok) {
         let data = res.data;
+        if (filtros.ruta) {
+          const origTarget = filtros.ruta.toLowerCase().trim();
+          data = data.filter(v => (v.origen || '').toLowerCase().trim() === origTarget);
+        }
         if (filtros.entregado !== '') {
           data = data.filter(v => String(v.entregado || 0) === filtros.entregado);
         }
@@ -189,7 +206,7 @@ function IERView({ catalogos, showToast }) {
   };
 
   const resetFiltros = () => setFiltros({
-    busqueda: '', id_propietario: '', id_chofer: '', id_gandola: '',
+    busqueda: '', id_propietario: '', id_chofer: '', id_gandola: '', ruta: '',
     fecha_desde: '', fecha_hasta: '', entregado: '', pagado: ''
   });
 
@@ -201,8 +218,8 @@ function IERView({ catalogos, showToast }) {
   return (
     <div>
       {/* BARRA DE FILTROS */}
-      <div className="card" style={{ marginBottom: '20px', padding: '16px 20px' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
+      <div className="card" style={{ marginBottom: '12px', padding: '12px 16px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
           {/* Búsqueda */}
           <div className="search-input-box" style={{ flex: '1 1 200px', minWidth: '160px' }}>
             <span className="search-icon" style={{ display: 'flex', alignItems: 'center' }}>
@@ -218,7 +235,7 @@ function IERView({ catalogos, showToast }) {
           </div>
 
           {/* Propietario */}
-          <div style={{ minWidth: '160px' }}>
+          <div style={{ minWidth: '150px' }}>
             <select className="form-select" value={filtros.id_propietario}
               onChange={e => setFiltros({ ...filtros, id_propietario: e.target.value })}>
               <option value="">Todos los propietarios</option>
@@ -227,7 +244,7 @@ function IERView({ catalogos, showToast }) {
           </div>
 
           {/* Chofer */}
-          <div style={{ minWidth: '150px' }}>
+          <div style={{ minWidth: '140px' }}>
             <select className="form-select" value={filtros.id_chofer}
               onChange={e => setFiltros({ ...filtros, id_chofer: e.target.value })}>
               <option value="">Todos los choferes</option>
@@ -236,11 +253,20 @@ function IERView({ catalogos, showToast }) {
           </div>
 
           {/* Gandola */}
-          <div style={{ minWidth: '150px' }}>
+          <div style={{ minWidth: '140px' }}>
             <select className="form-select" value={filtros.id_gandola}
               onChange={e => setFiltros({ ...filtros, id_gandola: e.target.value })}>
               <option value="">Todas las gandolas</option>
               {(catalogos.gandolas || []).map(g => <option key={g.id} value={g.placa}>{formatGandolaLabel(g)}</option>)}
+            </select>
+          </div>
+
+          {/* Ruta (Origen de Salida) */}
+          <div style={{ minWidth: '150px' }}>
+            <select className="form-select" value={filtros.ruta}
+              onChange={e => setFiltros({ ...filtros, ruta: e.target.value })}>
+              <option value="">Todas las rutas</option>
+              {origenesDisponibles.map(orig => <option key={orig} value={orig}>{orig}</option>)}
             </select>
           </div>
 
@@ -254,7 +280,7 @@ function IERView({ catalogos, showToast }) {
           </div>
 
           {/* Entregado */}
-          <div style={{ minWidth: '130px' }}>
+          <div style={{ minWidth: '120px' }}>
             <select className="form-select" value={filtros.entregado}
               onChange={e => setFiltros({ ...filtros, entregado: e.target.value })}>
               <option value="">Todos (entrega)</option>
@@ -264,7 +290,7 @@ function IERView({ catalogos, showToast }) {
           </div>
 
           {/* Pagado */}
-          <div style={{ minWidth: '130px' }}>
+          <div style={{ minWidth: '120px' }}>
             <select className="form-select" value={filtros.pagado}
               onChange={e => setFiltros({ ...filtros, pagado: e.target.value })}>
               <option value="">Todos (pago)</option>
@@ -282,69 +308,72 @@ function IERView({ catalogos, showToast }) {
       </div>
 
       {/* RESUMEN RÁPIDO */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
         <div style={{
           background: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.35)',
-          borderRadius: '10px', padding: '10px 18px',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '110px'
+          borderRadius: '8px', padding: '6px 14px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '95px'
         }}>
-          <span style={{ fontSize: '22px', fontWeight: 700, color: '#60a5fa' }}>{totalViajes}</span>
+          <span style={{ fontSize: '20px', fontWeight: 700, color: '#60a5fa' }}>{totalViajes}</span>
           <span style={{ fontSize: '11px', color: 'var(--on-surface)', opacity: 0.85 }}>Viajes</span>
         </div>
         <div style={{
           background: 'rgba(234, 179, 8, 0.14)', border: '1px solid rgba(234, 179, 8, 0.35)',
-          borderRadius: '10px', padding: '10px 18px',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '110px'
+          borderRadius: '8px', padding: '6px 14px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '95px'
         }}>
-          <span style={{ fontSize: '22px', fontWeight: 700, color: '#facc15' }}>{totalEntregados}</span>
+          <span style={{ fontSize: '20px', fontWeight: 700, color: '#facc15' }}>{totalEntregados}</span>
           <span style={{ fontSize: '11px', color: 'var(--on-surface)', opacity: 0.85 }}>Entregados</span>
         </div>
         <div style={{
           background: 'rgba(148, 163, 184, 0.12)', border: '1px solid rgba(148, 163, 184, 0.30)',
-          borderRadius: '10px', padding: '10px 18px',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '110px'
+          borderRadius: '8px', padding: '6px 14px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '95px'
         }}>
-          <span style={{ fontSize: '22px', fontWeight: 700, color: '#94a3b8' }}>{totalNoEntregados}</span>
+          <span style={{ fontSize: '20px', fontWeight: 700, color: '#94a3b8' }}>{totalNoEntregados}</span>
           <span style={{ fontSize: '11px', color: 'var(--on-surface)', opacity: 0.85 }}>No entregados</span>
         </div>
         <div style={{
           background: 'rgba(34, 197, 94, 0.14)', border: '1px solid rgba(34, 197, 94, 0.35)',
-          borderRadius: '10px', padding: '10px 18px',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '110px'
+          borderRadius: '8px', padding: '6px 14px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '95px'
         }}>
-          <span style={{ fontSize: '22px', fontWeight: 700, color: '#4ade80' }}>{totalPagados}</span>
+          <span style={{ fontSize: '20px', fontWeight: 700, color: '#4ade80' }}>{totalPagados}</span>
           <span style={{ fontSize: '11px', color: 'var(--on-surface)', opacity: 0.85 }}>Pagados</span>
         </div>
         <div style={{
           background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.35)',
-          borderRadius: '10px', padding: '10px 18px',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '110px'
+          borderRadius: '8px', padding: '6px 14px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '95px'
         }}>
-          <span style={{ fontSize: '22px', fontWeight: 700, color: '#f87171' }}>{totalViajes - totalPagados}</span>
+          <span style={{ fontSize: '20px', fontWeight: 700, color: '#f87171' }}>{totalViajes - totalPagados}</span>
           <span style={{ fontSize: '11px', color: 'var(--on-surface)', opacity: 0.85 }}>Pendientes cobro</span>
         </div>
       </div>
 
-
       {/* LEYENDA */}
-      <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', flexWrap: 'wrap', fontSize: '12px', color: 'var(--on-surface-variant)' }}>
+      <div style={{ display: 'flex', gap: '14px', marginBottom: '8px', flexWrap: 'wrap', fontSize: '11px', color: 'var(--on-surface-variant)' }}>
         <span>Leyenda:</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: 14, height: 14, background: 'rgba(234,179,8,0.38)', border: '2px solid #eab308', borderRadius: 3, display: 'inline-block' }} />
+          <span style={{ width: 12, height: 12, background: 'rgba(234,179,8,0.38)', border: '2px solid #eab308', borderRadius: 3, display: 'inline-block' }} />
           Entregado (pendiente cobro)
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: 14, height: 14, background: 'rgba(34,197,94,0.38)', border: '2px solid #22c55e', borderRadius: 3, display: 'inline-block' }} />
+          <span style={{ width: 12, height: 12, background: 'rgba(34,197,94,0.38)', border: '2px solid #22c55e', borderRadius: 3, display: 'inline-block' }} />
           Entregado y Pagado
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: 14, height: 14, background: 'var(--surface-variant)', border: '2px solid var(--outline)', borderRadius: 3, display: 'inline-block' }} />
+          <span style={{ width: 12, height: 12, background: 'var(--surface-variant)', border: '2px solid var(--outline)', borderRadius: 3, display: 'inline-block' }} />
           Pendiente
         </span>
       </div>
 
-      {/* TABLA */}
-      <div className="table-container" style={{ maxHeight: '520px', overflowY: 'auto' }}>
+      {/* TABLA CON ALTO FIJO */}
+      <div className="table-container" style={{
+        height: 'calc(100vh - 330px)',
+        minHeight: '300px',
+        overflowY: 'auto'
+      }}>
         <table className="data-table">
           <thead>
             <tr>

@@ -50,31 +50,61 @@ export function getDateRangePresets(preset) {
   const d = today.getDate();
   const dayOfWeek = today.getDay();
   const formatDate = (date) => {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d2 = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d2}`;
+    const yr = date.getFullYear();
+    const mo = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${day}`;
   };
 
-  if (preset === 'esta_semana') {
+  const calcEstaSemana = () => {
     const diffToMonday = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek;
     const monday = new Date(today);
     monday.setDate(d + diffToMonday);
-    return { inicio: formatDate(monday), fin: formatDate(today) };
-  } else if (preset === 'semana_anterior') {
+    const inicio = formatDate(monday);
+    const fin = formatDate(today);
+    return { inicio, fin, desde: inicio, hasta: fin };
+  };
+
+  const calcSemanaAnterior = () => {
     const diffToMonday = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek - 7;
     const prevMonday = new Date(today);
     prevMonday.setDate(d + diffToMonday);
     const prevSunday = new Date(prevMonday);
     prevSunday.setDate(prevMonday.getDate() + 6);
-    return { inicio: formatDate(prevMonday), fin: formatDate(prevSunday) };
-  } else if (preset === 'mes_actual') {
+    const inicio = formatDate(prevMonday);
+    const fin = formatDate(prevSunday);
+    return { inicio, fin, desde: inicio, hasta: fin };
+  };
+
+  const calcMesActual = () => {
     const firstDay = new Date(y, m, 1);
-    return { inicio: formatDate(firstDay), fin: formatDate(today) };
-  } else if (preset === 'mes_anterior') {
+    const inicio = formatDate(firstDay);
+    const fin = formatDate(today);
+    return { inicio, fin, desde: inicio, hasta: fin };
+  };
+
+  const calcMesAnterior = () => {
     const firstPrev = new Date(y, m - 1, 1);
     const lastPrev = new Date(y, m, 0);
-    return { inicio: formatDate(firstPrev), fin: formatDate(lastPrev) };
-  }
-  return { inicio: '', fin: '' };
+    const inicio = formatDate(firstPrev);
+    const fin = formatDate(lastPrev);
+    return { inicio, fin, desde: inicio, hasta: fin };
+  };
+
+  if (preset === 'esta_semana' || preset === 'esta-semana') return calcEstaSemana();
+  if (preset === 'semana_anterior' || preset === 'semana-anterior') return calcSemanaAnterior();
+  if (preset === 'mes_actual' || preset === 'este_mes' || preset === 'este-mes') return calcMesActual();
+  if (preset === 'mes_anterior' || preset === 'mes-anterior') return calcMesAnterior();
+
+  return {
+    inicio: '',
+    fin: '',
+    desde: '',
+    hasta: '',
+    esteMes: calcMesActual(),
+    mesActual: calcMesActual(),
+    mesAnterior: calcMesAnterior(),
+    estaSemana: calcEstaSemana(),
+    semanaAnterior: calcSemanaAnterior()
+  };
 }
