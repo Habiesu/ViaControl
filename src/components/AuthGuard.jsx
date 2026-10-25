@@ -6,6 +6,7 @@ const { ipcRenderer } = window.require('electron');
 export const AuthContext = createContext({
   session: null,
   user: null,
+  isAdmin: false,
   logout: () => {},
   syncStatus: { syncing: false, lastSync: null, pendingCount: 0, error: null },
   triggerSync: () => {}
@@ -13,9 +14,22 @@ export const AuthContext = createContext({
 
 export const useAuth = () => useContext(AuthContext);
 
+function checkUserIsAdmin(u) {
+  if (!u) return false;
+  const appRole = u.app_metadata?.role;
+  const userRole = u.user_metadata?.role;
+  return (
+    appRole === 'admin' ||
+    u.app_metadata?.is_admin === true ||
+    userRole === 'admin' ||
+    u.user_metadata?.is_admin === true
+  );
+}
+
 export default function AuthGuard({ children, onDataRefreshed }) {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState({
     syncing: false,
@@ -30,14 +44,18 @@ export default function AuthGuard({ children, onDataRefreshed }) {
       const res = await ipcRenderer.invoke('auth:getSession');
       if (res.ok && res.session) {
         setSession(res.session);
-        setUser(res.user || res.session.user);
+        const currentUser = res.user || res.session.user;
+        setUser(currentUser);
+        setIsAdmin(res.isAdmin ?? checkUserIsAdmin(currentUser));
       } else {
         setSession(null);
         setUser(null);
+        setIsAdmin(false);
       }
     } catch (err) {
       console.warn('[AuthGuard] Error al verificar sesión:', err.message);
       setSession(null);
+      setIsAdmin(false);
     } finally {
       setLoading(false);
     }
@@ -91,19 +109,32 @@ export default function AuthGuard({ children, onDataRefreshed }) {
     checkSession();
   }, []);
 
-  // Al iniciar con sesión activa o tras login, sincronizar automáticamente
+  // Al iniciar con sesión activa o tras login, sincronizar automáticamente (si no está desactivado)
   useEffect(() => {
-    if (session) {
-      triggerSync();
+    if (!session) return;
 
-      const handleOnline = () => {
-        console.log('[AuthGuard] Conexión restaurada, sincronizando...');
+    let cancelled = false;
+
+    ipcRenderer.invoke('sync:obtenerConfig').then(res => {
+      if (cancelled) return;
+      const mode = res?.config?.mode ?? 'auto';
+      if (mode === 'auto') {
         triggerSync();
+      }
+
+      const handleOnline = async () => {
+        const cfg = await ipcRenderer.invoke('sync:obtenerConfig');
+        if ((cfg?.config?.mode ?? 'auto') === 'auto') {
+          console.log('[AuthGuard] Conexión restaurada, sincronizando...');
+          triggerSync();
+        }
       };
 
       window.addEventListener('online', handleOnline);
       return () => window.removeEventListener('online', handleOnline);
-    }
+    });
+
+    return () => { cancelled = true; };
   }, [session]);
 
   if (loading) {
@@ -143,9 +174,18 @@ export default function AuthGuard({ children, onDataRefreshed }) {
   if (!session) {
     return (
       <LoginView
-        onLoginSuccess={(newSession) => {
+        onLoginSuccess={(newSession, newIsAdmin) => {
           setSession(newSession);
-          setUser(newSession.user);
+          const currentUser = newSession.user;
+          setUser(currentUser);
+          if (typeof newIsAdmin === 'boolean') {
+            setIsAdmin(newIsAdmin);
+          } else {
+            setIsAdmin(checkUserIsAdmin(currentUser));
+            ipcRenderer.invoke('auth:esAdmin').then(r => {
+              if (r && r.ok) setIsAdmin(!!r.isAdmin);
+            });
+          }
         }}
       />
     );
@@ -155,6 +195,7 @@ export default function AuthGuard({ children, onDataRefreshed }) {
     <AuthContext.Provider value={{
       session,
       user,
+      isAdmin,
       logout: handleLogout,
       syncStatus,
       triggerSync

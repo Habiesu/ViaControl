@@ -75,6 +75,7 @@ async function restoreSession() {
     if (!error && data?.session) {
       currentSession = data.session;
       saveSessionToDisk(currentSession);
+      await checkIsAdminFromDB(data.session.user);
       return currentSession;
     }
   } catch (err) {
@@ -84,6 +85,9 @@ async function restoreSession() {
   // Si falló por falta de red (offline), mantenemos la sesión guardada localmente
   // permitiendo el uso Offline-First de la aplicación
   currentSession = saved;
+  if (saved.user) {
+    cachedIsAdmin = (saved.user.app_metadata?.role === 'admin' || saved.user.app_metadata?.is_admin === true);
+  }
   return currentSession;
 }
 
@@ -96,7 +100,8 @@ async function login(email, password) {
 
   currentSession = data.session;
   saveSessionToDisk(currentSession);
-  return { session: currentSession, user: data.user };
+  const isAdm = await checkIsAdminFromDB(data.user);
+  return { session: currentSession, user: data.user, isAdmin: isAdm };
 }
 
 async function register(email, password) {
@@ -110,7 +115,8 @@ async function register(email, password) {
     currentSession = data.session;
     saveSessionToDisk(currentSession);
   }
-  return { session: data.session, user: data.user };
+  cachedIsAdmin = false;
+  return { session: data.session, user: data.user, isAdmin: false };
 }
 
 async function logout() {
@@ -121,6 +127,7 @@ async function logout() {
     console.warn('[AuthManager] Error al cerrar sesión en el servidor:', err.message);
   }
   currentSession = null;
+  cachedIsAdmin = false;
   saveSessionToDisk(null);
   return { ok: true };
 }
@@ -137,6 +144,75 @@ function getUser() {
   return session ? session.user : null;
 }
 
+let cachedIsAdmin = null;
+
+async function checkIsAdminFromDB(user = null) {
+  const u = user || getUser();
+  if (!u || !u.id) {
+    cachedIsAdmin = false;
+    return false;
+  }
+
+  // 1. Verificación por app_metadata (asignado por SQL o claims del servidor en Supabase)
+  const appRole = u.app_metadata?.role;
+  if (appRole === 'admin' || u.app_metadata?.is_admin === true) {
+    console.log(`[AuthManager] Usuario ${u.email} identificado como ADMIN vía app_metadata.`);
+    cachedIsAdmin = true;
+    return true;
+  }
+
+  // 2. Verificación por user_metadata (asignado al editar el usuario en Supabase Dashboard)
+  const userRole = u.user_metadata?.role;
+  if (userRole === 'admin' || u.user_metadata?.is_admin === true) {
+    console.log(`[AuthManager] Usuario ${u.email} identificado como ADMIN vía user_metadata.`);
+    cachedIsAdmin = true;
+    return true;
+  }
+
+  // 3. Verificación en la tabla 'usuarios_admin' en Supabase (por user_id o por email)
+  try {
+    initSupabase();
+    let { data, error } = await supabase
+      .from('usuarios_admin')
+      .select('user_id, email')
+      .eq('user_id', u.id)
+      .maybeSingle();
+
+    if (!data && u.email) {
+      const resEmail = await supabase
+        .from('usuarios_admin')
+        .select('user_id, email')
+        .eq('email', u.email)
+        .maybeSingle();
+      data = resEmail.data;
+    }
+
+    if (data) {
+      console.log(`[AuthManager] Usuario ${u.email} identificado como ADMIN vía tabla usuarios_admin.`);
+      cachedIsAdmin = true;
+      return true;
+    }
+  } catch (err) {
+    console.warn('[AuthManager] Error al consultar tabla usuarios_admin en Supabase:', err.message);
+  }
+
+  console.log(`[AuthManager] Usuario ${u.email} autenticado como estándar (no admin). Metadata:`, {
+    app_metadata: u.app_metadata,
+    user_metadata: u.user_metadata
+  });
+  cachedIsAdmin = false;
+  return false;
+}
+
+function isAdmin(user = null) {
+  const u = user || getUser();
+  if (!u) return false;
+  if (u.app_metadata?.role === 'admin' || u.app_metadata?.is_admin === true) {
+    return true;
+  }
+  return cachedIsAdmin === true;
+}
+
 function getSupabaseClient() {
   initSupabase();
   return supabase;
@@ -150,5 +226,7 @@ module.exports = {
   logout,
   getSession,
   getUser,
+  checkIsAdminFromDB,
+  isAdmin,
   getSupabaseClient
 };

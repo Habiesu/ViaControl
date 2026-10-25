@@ -96,11 +96,18 @@ function registerReportesIPC() {
 
         const viajes = await dbAll(sql, params);
 
-        let sqlTaller = "SELECT * FROM Gastos_Extra WHERE (id_gandola = ? OR id_gandola = ?) AND tipo = 'Gasto_Empresa' AND (deleted_at IS NULL)";
-        const paramsTaller = [g.placa, String(g.id)];
-        if (fecha_inicio) { sqlTaller += " AND fecha >= ?"; paramsTaller.push(fecha_inicio); }
-        if (fecha_fin) { sqlTaller += " AND fecha <= ?"; paramsTaller.push(fecha_fin); }
-        sqlTaller += " ORDER BY fecha ASC";
+        // Filtrar gastos SOLO por placa para evitar contaminación cruzada entre propietarios
+        let sqlTaller = `
+          SELECT ge.* FROM Gastos_Extra ge
+          INNER JOIN Gandolas ga ON ga.placa = ge.id_gandola
+          WHERE ge.id_gandola = ?
+            AND ga.id_propietario = ?
+            AND ge.tipo = 'Gasto_Empresa'
+            AND (ge.deleted_at IS NULL)`;
+        const paramsTaller = [g.placa, id_propietario];
+        if (fecha_inicio) { sqlTaller += ` AND ge.fecha >= ?`; paramsTaller.push(fecha_inicio); }
+        if (fecha_fin) { sqlTaller += ` AND ge.fecha <= ?`; paramsTaller.push(fecha_fin); }
+        sqlTaller += ` ORDER BY ge.fecha ASC`;
 
         const gastosTallerRows = await dbAll(sqlTaller, paramsTaller);
 

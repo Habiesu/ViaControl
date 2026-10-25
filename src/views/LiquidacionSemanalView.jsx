@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { formatUSD, getTodayString, getDateRangePresets, parseTelefono, buildTelefono, PREFIJOS_VZLA } from '../utils/helpers.js';
 const { ipcRenderer } = window.require('electron');
 
-function LiquidacionSemanalView({ catalogos, showToast }) {
+function LiquidacionSemanalView({ catalogos, showToast, onSubtitleChange }) {
   // ── Pestaña activa ──────────────────────────────────────
   const [tabActiva, setTabActiva] = useState('chofer'); // 'chofer' | 'propietario'
 
@@ -112,6 +112,17 @@ function LiquidacionSemanalView({ catalogos, showToast }) {
   useEffect(() => {
     if (idPropietario && tabActiva === 'propietario') cargarResumenProp();
   }, [idPropietario, fechaInicioP, fechaFinP, tabActiva]);
+
+  // Notificar al padre del título dinámico
+  useEffect(() => {
+    if (typeof onSubtitleChange === 'function') {
+      onSubtitleChange(
+        tabActiva === 'propietario'
+          ? 'Resumen de Liquidaciones por Propietario'
+          : 'Resumen de Liquidaciones a Choferes'
+      );
+    }
+  }, [tabActiva]);
 
   const aplicarRangoRapidoP = (preset) => {
     const r = getDateRangePresets(preset);

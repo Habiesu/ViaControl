@@ -234,22 +234,25 @@
   color: #111827;
 }
 
-/* Botón toggle tema */
+/* Botón toggle tema y botones topbar */
 .theme-toggle-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 6px 12px;
+  height: 32px;
+  padding: 0 12px;
   border: 1px solid var(--outline-variant);
   border-radius: 6px;
   background: var(--surface-container);
   color: var(--on-surface-variant);
   font-family: var(--font-body);
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: 0.82rem;
+  font-weight: 600;
   cursor: pointer;
   transition: background 0.2s, color 0.2s, border-color 0.2s;
   white-space: nowrap;
+  box-sizing: border-box;
 }
 .theme-toggle-btn:hover {
   background: var(--surface-container-high);
@@ -258,6 +261,19 @@
 }
 .theme-toggle-btn .material-symbols-outlined {
   font-size: 16px;
+}
+
+.btn-nuevo-viaje-top {
+  height: 32px !important;
+  padding: 0 14px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  border-radius: 6px !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  box-sizing: border-box !important;
 }
 
 /* ─── RESET & BASE ────────────────────────────────────────────────────────── */

@@ -36,6 +36,7 @@ const NAV_GROUPS = [
 function AppContent({ onRegisterRefresh }) {
   const { user, logout, syncStatus, triggerSync } = useAuth();
   const [currentTab, setCurrentTab] = useState('nuevo-viaje');
+  const [pageSubtitle, setPageSubtitle] = useState(null); // dynamic subtitle override
   const [catalogos, setCatalogos] = useState({
     rutas: [], origenes: [], choferes: [], gandolas: [], propietarios: [],
   });
@@ -86,6 +87,9 @@ function AppContent({ onRegisterRefresh }) {
     }
   }, []);
 
+  // Clear subtitle on tab change
+  const handleTabChange = (key) => { setCurrentTab(key); setPageSubtitle(null); };
+
   const tab = TABS[currentTab];
   const viewProps = { catalogos, showToast };
 
@@ -111,7 +115,7 @@ function AppContent({ onRegisterRefresh }) {
                 <div
                   key={key}
                   className={`nav-item ${currentTab === key ? 'active' : ''}`}
-                  onClick={() => setCurrentTab(key)}
+                  onClick={() => handleTabChange(key)}
                 >
                   <span className="material-symbols-outlined">{TABS[key].icon}</span>
                   <span>{TABS[key].nav}</span>
@@ -124,7 +128,7 @@ function AppContent({ onRegisterRefresh }) {
         <div className="sidebar-footer">
           <div
             className={`nav-item ajustes-nav-btn ${currentTab === 'ajustes' ? 'active' : ''}`}
-            onClick={() => setCurrentTab('ajustes')}
+            onClick={() => handleTabChange('ajustes')}
             style={{ marginBottom: '8px' }}
           >
             <span className="material-symbols-outlined">settings</span>
@@ -210,41 +214,27 @@ function AppContent({ onRegisterRefresh }) {
               <span style={{ color: 'var(--outline-variant)' }}>/</span>
               <span className="accent">{tab?.breadcrumb}</span>
             </div>
-            <h1>{tab?.label}</h1>
+            <h1>{pageSubtitle || tab?.label}</h1>
           </div>
           <div className="topbar-actions">
-            {/* BOTÓN FORZAR SINCRONIZACIÓN */}
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={triggerSync}
-              disabled={syncStatus.syncing}
-              title={syncStatus.lastSync ? `Última sincronización: ${new Date(syncStatus.lastSync).toLocaleTimeString()}` : 'Sincronizar con la nube'}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              <span
-                className={`material-symbols-outlined ${syncStatus.syncing ? 'spinning' : ''}`}
-                style={{ fontSize: '16px', color: syncStatus.syncing ? '#3b82f6' : 'inherit' }}
-              >
-                sync
-              </span>
-              <span>{syncStatus.syncing ? 'Sincronizando' : 'Sincronizar'}</span>
-            </button>
-
             <button
               id="theme-toggle"
               className="theme-toggle-btn"
               onClick={toggleTheme}
               title={theme === 'dark' ? 'Cambiar a Tema Claro' : 'Cambiar a Tema Oscuro'}
             >
-              <span className="material-symbols-outlined">
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
                 {theme === 'dark' ? 'light_mode' : 'dark_mode'}
               </span>
-              {theme === 'dark' ? 'Claro' : 'Oscuro'}
+              <span>{theme === 'dark' ? 'Claro' : 'Oscuro'}</span>
             </button>
             {currentTab !== 'nuevo-viaje' && (
-              <button className="btn btn-primary btn-sm" onClick={() => setCurrentTab('nuevo-viaje')}>
+              <button
+                className="btn btn-primary btn-sm btn-nuevo-viaje-top"
+                onClick={() => handleTabChange('nuevo-viaje')}
+              >
                 <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>add</span>
-                Nuevo Viaje
+                <span>Nuevo Viaje</span>
               </button>
             )}
           </div>
@@ -267,7 +257,7 @@ function AppContent({ onRegisterRefresh }) {
             {currentTab === 'viajes' && (
               <HistorialViajesView {...viewProps} onActualizarCatalogos={loadCatalogos} />
             )}
-            {currentTab === 'liquidacion' && <LiquidacionSemanalView {...viewProps} />}
+            {currentTab === 'liquidacion' && <LiquidacionSemanalView {...viewProps} onSubtitleChange={setPageSubtitle} />}
             {currentTab === 'analisis' && <AnalisisMensualView {...viewProps} />}
             {currentTab === 'ier' && <IERView {...viewProps} />}
             {currentTab === 'saldos-propietarios' && (

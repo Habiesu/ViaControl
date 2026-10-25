@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -11,6 +11,19 @@ export default function LoginView({ onLoginSuccess }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // Asegurar que el teclado y el cursor estén inmediatamente activos en el input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        window.focus();
+        ipcRenderer.invoke('app:refocusWindow');
+      } catch {}
+      const input = document.querySelector('input[type="email"]');
+      if (input) input.focus();
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [mode]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -42,7 +55,7 @@ export default function LoginView({ onLoginSuccess }) {
         });
 
         if (res.ok && res.session) {
-          onLoginSuccess(res.session);
+          onLoginSuccess(res.session, res.isAdmin);
         } else {
           setError(res.error || 'Credenciales inválidas.');
         }

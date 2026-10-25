@@ -251,3 +251,35 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authentic
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
 
+-- ------------------------------------------------------------------------------
+-- 8. CONTROL DE ADMINISTRADORES (PROTEGIDO EN BASE DE DATOS)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.usuarios_admin (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT,
+  creado_en TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.usuarios_admin ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS usuarios_admin_select_policy ON public.usuarios_admin;
+CREATE POLICY usuarios_admin_select_policy ON public.usuarios_admin
+  FOR SELECT TO authenticated
+  USING (auth.uid() = user_id);
+
+GRANT SELECT ON public.usuarios_admin TO authenticated;
+
+-- ==============================================================================
+-- INSTRUCCIONES: CÓMO DAR ROL ADMIN A UN USUARIO EN SUPABASE:
+-- ==============================================================================
+-- Opción A: Insertar en la tabla usuarios_admin:
+-- INSERT INTO public.usuarios_admin (user_id, email)
+-- SELECT id, email FROM auth.users WHERE email = 'tu_correo_real@ejemplo.com'
+-- ON CONFLICT (user_id) DO NOTHING;
+--
+-- Opción B: Asignar 'admin' en app_metadata del usuario:
+-- UPDATE auth.users 
+-- SET raw_app_meta_data = raw_app_meta_data || '{"role": "admin"}'::jsonb 
+-- WHERE email = 'tu_correo_real@ejemplo.com';
+
+
