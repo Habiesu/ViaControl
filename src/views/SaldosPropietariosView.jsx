@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { formatUSD, getTodayString } from '../utils/helpers';
+import { formatUSD, getTodayString, escapeHtml } from '../utils/helpers';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -968,11 +968,11 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
   const handlePrint = () => {
     const printWin = window.open('', '_blank');
     const selectedAg = agentes.find(a => String(a.id) === String(filtros.id_agente));
-    const title = selectedAg ? `Estado de Cuenta — Agente ${selectedAg.nombre}` : 'Control de Saldos por Agentes';
+    const title = escapeHtml(selectedAg ? `Estado de Cuenta — Agente ${selectedAg.nombre}` : 'Control de Saldos por Agentes');
 
     const rowsResumen = resumen.map(r => `
       <tr>
-        <td><strong>${r.nombre}</strong></td>
+        <td><strong>${escapeHtml(r.nombre)}</strong></td>
         <td style="text-align:right; color:#15803d; font-weight:600">${formatUSD(r.total_entregado)}</td>
         <td style="text-align:right; color:#dc2626; font-weight:600">${formatUSD(r.total_gastos)}</td>
         <td style="text-align:right; font-weight:700; color:${r.saldo_actual >= 0 ? '#15803d' : '#dc2626'}">
@@ -983,16 +983,16 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
 
     const rowsMovs = movimientosVisibles.map(m => `
       <tr>
-        <td style="text-align:center">${m.fecha}</td>
-        <td><strong>${m.agente_nombre}</strong></td>
-        <td>${m.propietario_nombre || '—'}</td>
+        <td style="text-align:center">${escapeHtml(m.fecha)}</td>
+        <td><strong>${escapeHtml(m.agente_nombre)}</strong></td>
+        <td>${escapeHtml(m.propietario_nombre || '—')}</td>
         <td style="text-align:center">
           <span style="padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 10px; background:${m.tipo_movimiento === 'INGRESO' ? '#dcfce7; color:#15803d' : '#fee2e2; color:#dc2626'}">
             ${m.tipo_movimiento === 'INGRESO' ? '+ INGRESO' : '- GASTO'}
           </span>
         </td>
-        <td>${m.concepto}</td>
-        <td>${m.metodo_pago || '—'} ${m.referencia && m.referencia !== '—' ? '(' + m.referencia + ')' : ''}</td>
+        <td>${escapeHtml(m.concepto)}</td>
+        <td>${escapeHtml(m.metodo_pago || '—')} ${m.referencia && m.referencia !== '—' ? '(' + escapeHtml(m.referencia) + ')' : ''}</td>
         <td style="text-align:right; font-weight:700; color:${m.tipo_movimiento === 'INGRESO' ? '#15803d' : '#dc2626'}">
           ${m.tipo_movimiento === 'INGRESO' ? '+' : '-'}${formatUSD(m.monto)}
         </td>

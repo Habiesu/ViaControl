@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { formatUSD } from '../utils/helpers.js';
+import { formatUSD, escapeHtml } from '../utils/helpers.js';
 const { ipcRenderer } = window.require('electron');
 
 function formatGandolaLabel(g) {
@@ -146,11 +146,11 @@ function IERView({ catalogos, showToast }) {
       const gandolaLabel = gandola ? formatGandolaLabel(gandola) : (v.id_gandola || '');
 
       return `<tr style="background:${rowBg}">
-        <td>${v.fecha}</td>
-        <td>${v.contenedor || 'S/C'}</td>
-        <td>${v.destino}<br><small>${v.origen}</small></td>
-        <td>${v.id_chofer}</td>
-        <td>${gandolaLabel}</td>
+        <td>${escapeHtml(v.fecha)}</td>
+        <td>${escapeHtml(v.contenedor || 'S/C')}</td>
+        <td>${escapeHtml(v.destino)}<br><small>${escapeHtml(v.origen)}</small></td>
+        <td>${escapeHtml(v.id_chofer)}</td>
+        <td>${escapeHtml(gandolaLabel)}</td>
         <td style="text-align:right">${formatUSD(v.precio_viaje)}</td>
         <td style="text-align:center">${entregado ? '✅' : '⬜'}</td>
         <td style="text-align:center">${pagado ? '✅' : '⬜'}</td>

@@ -4,6 +4,20 @@
 
 export const PREFIJOS_VZLA = ['0412', '0414', '0422', '0424', '0416', '0426'];
 
+/**
+ * Escapa texto antes de insertarlo en HTML construido a mano (ventanas de impresión con document.write).
+ * Sin esto, un dato como `<img onerror=...>` (p. ej. importado desde Excel) se ejecutaría con acceso a Node.
+ */
+export function escapeHtml(valor) {
+  if (valor === null || valor === undefined) return '';
+  return String(valor)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 /** Formatea un número como monto en dólares: $1,234.56 */
 export function formatUSD(num) {
   if (num === null || num === undefined || isNaN(num)) return '$0.00';
