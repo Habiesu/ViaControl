@@ -16,25 +16,46 @@ const TABLE_MAPPING = {
 // Columnas de negocio específicas por tabla (excluyendo id, sync_status)
 const TABLE_COLUMNS = {
   'Grupos_Propietarios': ['nombre', 'descripcion'],
-  'Propietarios': ['nombre', 'contacto', 'id_grupo', 'id_agente'],
+  'Propietarios': ['nombre', 'contacto', 'id_grupo', 'id_agente', 'agente_uuid', 'grupo_uuid'],
   'Agentes': ['nombre', 'contacto', 'id_propietario_vinculado', 'notas'],
   'Rutas': ['origen', 'destino', 'precio_base', 'activo'],
-  'Choferes': ['nombre', 'cedula', 'telefono', 'porcentaje_comision', 'id_propietario', 'activo'],
-  'Gandolas': ['placa', 'modelo', 'marca', 'año', 'capacidad', 'id_propietario', 'activo'],
+  'Choferes': ['nombre', 'cedula', 'telefono', 'porcentaje_comision', 'id_propietario', 'propietario_uuid', 'activo'],
+  'Gandolas': ['placa', 'modelo', 'marca', 'año', 'capacidad', 'id_propietario', 'propietario_uuid', 'activo'],
   'Viajes': [
     'fecha', 'contenedor', 'origen', 'destino', 'id_gandola', 'id_chofer',
-    'id_propietario', 'precio_viaje', 'pago_chofer', 'peajes', 'viaticos',
+    'id_propietario', 'propietario_uuid', 'precio_viaje', 'pago_chofer', 'peajes', 'viaticos',
     'gasoil', 'total_gastos', 'ganancia', 'estado', 'notas', 'entregado', 'pagado'
   ],
   'Gastos_Extra': [
     'fecha', 'id_chofer', 'id_gandola', 'id_viaje', 'id_propietario',
-    'id_agente', 'categoria', 'tipo', 'descripcion', 'monto'
+    'id_agente', 'propietario_uuid', 'agente_uuid', 'viaje_uuid', 'categoria', 'tipo', 'descripcion', 'monto'
   ],
   'Aportes_Propietarios': [
-    'fecha', 'id_propietario', 'id_agente', 'monto', 'concepto',
+    'fecha', 'id_propietario', 'id_agente', 'propietario_uuid', 'agente_uuid', 'monto', 'concepto',
     'metodo_pago', 'referencia', 'notas'
   ]
 };
+
+async function resolveLocalForeignKeys(localTable, remote) {
+  const row = { ...remote };
+  try {
+    if (row.propietario_uuid) {
+      const p = await dbGet("SELECT id FROM Propietarios WHERE uuid = ?", [row.propietario_uuid]);
+      if (p && p.id) row.id_propietario = p.id;
+    }
+    if (row.agente_uuid) {
+      const a = await dbGet("SELECT id FROM Agentes WHERE uuid = ?", [row.agente_uuid]);
+      if (a && a.id) row.id_agente = a.id;
+    }
+    if (row.viaje_uuid) {
+      const v = await dbGet("SELECT id FROM Viajes WHERE uuid = ?", [row.viaje_uuid]);
+      if (v && v.id) row.id_viaje = v.id;
+    }
+  } catch (resErr) {
+    console.warn('[SyncEngine] Advertencia al resolver FKs locales:', resErr.message);
+  }
+  return row;
+}
 
 let isSyncing = false;
 
@@ -86,6 +107,20 @@ async function pushChanges(supabase, userId) {
         // Copiar columnas de datos
         for (const col of columns) {
           payload[col] = row[col] !== undefined ? row[col] : null;
+        }
+
+        // Asegurar que si la fila local tiene id local pero no UUID relacional, se resuelva antes del push
+        if (!payload.propietario_uuid && row.id_propietario) {
+          const p = await dbGet("SELECT uuid FROM Propietarios WHERE id = ?", [row.id_propietario]);
+          if (p?.uuid) payload.propietario_uuid = p.uuid;
+        }
+        if (!payload.agente_uuid && row.id_agente) {
+          const a = await dbGet("SELECT uuid FROM Agentes WHERE id = ?", [row.id_agente]);
+          if (a?.uuid) payload.agente_uuid = a.uuid;
+        }
+        if (!payload.viaje_uuid && row.id_viaje) {
+          const v = await dbGet("SELECT uuid FROM Viajes WHERE id = ?", [row.id_viaje]);
+          if (v?.uuid) payload.viaje_uuid = v.uuid;
         }
 
         const { error } = await supabase
@@ -141,7 +176,8 @@ async function pullChanges(supabase, userId, lastSync) {
 
       if (!remoteRows || remoteRows.length === 0) continue;
 
-      for (const remote of remoteRows) {
+      for (const rawRemote of remoteRows) {
+        const remote = await resolveLocalForeignKeys(localTable, rawRemote);
         const local = await dbGet(`SELECT * FROM ${localTable} WHERE uuid = ?`, [remote.uuid]);
 
         if (local) {
@@ -207,6 +243,15 @@ async function sync() {
     }
 
     const supabase = authManager.getSupabaseClient();
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session) {
+        authManager.saveSessionToDisk(sessionData.session);
+      }
+    } catch (tokenErr) {
+      console.warn('[SyncEngine] Advertencia al validar sesión proactiva:', tokenErr.message);
+    }
+
     const lastSync = await getLastSync();
     const syncStartTime = new Date().toISOString();
 

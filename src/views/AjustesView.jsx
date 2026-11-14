@@ -3,7 +3,7 @@ import { useAuth } from '../components/AuthGuard.jsx';
 
 const { ipcRenderer } = window.require('electron');
 
-export default function AjustesView({ showToast }) {
+export default function AjustesView({ showToast, theme, onThemeChange }) {
   const { user, isAdmin, logout, syncStatus, triggerSync } = useAuth();
   const [rutaDB, setRutaDB] = useState('');
   const [version, setVersion] = useState('');
@@ -99,6 +99,44 @@ export default function AjustesView({ showToast }) {
 
   return (
     <div className="ajustes-view">
+
+      {/* ── Apariencia: modo claro / oscuro ── */}
+      <section className="ajustes-section">
+        <div className="ajustes-section-header">
+          <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>palette</span>
+          <div>
+            <h2>Apariencia</h2>
+            <p>Elige cómo se ve ViaControl en esta computadora.</p>
+          </div>
+        </div>
+
+        <div className="ajustes-card">
+          <div className="ajustes-row">
+            <div className="ajustes-row-info">
+              <span className="ajustes-row-label">
+                <span className="material-symbols-outlined">contrast</span>
+                Modo de color
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--on-surface-variant)' }}>
+                {theme === 'dark' ? 'Fondo oscuro, cómodo con poca luz.' : 'Fondo claro, ideal para oficina con luz de día.'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {[['light', 'light_mode', 'Claro'], ['dark', 'dark_mode', 'Oscuro']].map(([modo, icono, etiqueta]) => (
+                <button
+                  key={modo}
+                  className={`btn btn-sm ${theme === modo ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => onThemeChange(modo)}
+                  aria-pressed={theme === modo}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>{icono}</span>
+                  {etiqueta}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* ── SECCIÓN UNIFICADA: Control de Sincronización ── */}
       <section className="ajustes-section">

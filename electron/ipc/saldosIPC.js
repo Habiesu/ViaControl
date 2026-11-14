@@ -1,6 +1,7 @@
 const { ipcMain } = require('electron');
 const crypto = require('crypto');
-const { dbAll, dbRun, dbGet } = require('../db/database');
+const { dbAll, dbRun, dbGet, dbTransaction } = require('../db/database');
+const { parseMonto } = require('../utils/numUtils');
 
 function registerSaldosIPC() {
   // ─── GESTIÓN DE AGENTES ──────────────────────────────────────────────────
@@ -33,40 +34,43 @@ function registerSaldosIPC() {
       const now = new Date().toISOString();
 
       let agenteId = id;
-      if (id) {
-        await dbRun(`
-          UPDATE Agentes SET
-            nombre = ?, contacto = ?, id_propietario_vinculado = ?, notas = ?,
-            updated_at = ?,
-            sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
-          WHERE id = ?
-        `, [nombre.trim(), contacto || '', id_propietario_vinculado ? Number(id_propietario_vinculado) : null, notas || '', now, id]);
-      } else {
-        const uuid = crypto.randomUUID();
-        const res = await dbRun(`
-          INSERT INTO Agentes (uuid, nombre, contacto, id_propietario_vinculado, notas, updated_at, sync_status)
-          VALUES (?, ?, ?, ?, ?, ?, 'pending_insert')
-        `, [uuid, nombre.trim(), contacto || '', id_propietario_vinculado ? Number(id_propietario_vinculado) : null, notas || '', now]);
-        agenteId = res.lastID;
-      }
 
-      // Asegurar que si el agente es un propietario en sí, se incluya en la lista de asignados
-      let finalPropIds = (propietariosIds || []).map(Number);
-      if (id_propietario_vinculado) {
-        const vinculId = Number(id_propietario_vinculado);
-        if (!finalPropIds.includes(vinculId)) {
-          finalPropIds.push(vinculId);
+      await dbTransaction(async () => {
+        if (id) {
+          await dbRun(`
+            UPDATE Agentes SET
+              nombre = ?, contacto = ?, id_propietario_vinculado = ?, notas = ?,
+              updated_at = ?,
+              sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
+            WHERE id = ?
+          `, [nombre.trim(), contacto || '', id_propietario_vinculado ? Number(id_propietario_vinculado) : null, notas || '', now, id]);
+        } else {
+          const uuid = crypto.randomUUID();
+          const res = await dbRun(`
+            INSERT INTO Agentes (uuid, nombre, contacto, id_propietario_vinculado, notas, updated_at, sync_status)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending_insert')
+          `, [uuid, nombre.trim(), contacto || '', id_propietario_vinculado ? Number(id_propietario_vinculado) : null, notas || '', now]);
+          agenteId = res.lastID;
         }
-      }
 
-      // Desvincular propietarios anteriores de este agente
-      await dbRun("UPDATE Propietarios SET id_agente = NULL, updated_at = ?, sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END WHERE id_agente = ?", [now, agenteId]);
+        // Asegurar que si el agente es un propietario en sí, se incluya en la lista de asignados
+        let finalPropIds = (propietariosIds || []).map(Number);
+        if (id_propietario_vinculado) {
+          const vinculId = Number(id_propietario_vinculado);
+          if (!finalPropIds.includes(vinculId)) {
+            finalPropIds.push(vinculId);
+          }
+        }
 
-      // Vincular los nuevos propietarios seleccionados
-      if (finalPropIds.length > 0) {
-        const ph = finalPropIds.map(() => '?').join(',');
-        await dbRun(`UPDATE Propietarios SET id_agente = ?, updated_at = ?, sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END WHERE id IN (${ph})`, [agenteId, now, ...finalPropIds]);
-      }
+        // Desvincular propietarios anteriores de este agente
+        await dbRun("UPDATE Propietarios SET id_agente = NULL, updated_at = ?, sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END WHERE id_agente = ?", [now, agenteId]);
+
+        // Vincular los nuevos propietarios seleccionados
+        if (finalPropIds.length > 0) {
+          const ph = finalPropIds.map(() => '?').join(',');
+          await dbRun(`UPDATE Propietarios SET id_agente = ?, updated_at = ?, sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END WHERE id IN (${ph})`, [agenteId, now, ...finalPropIds]);
+        }
+      });
 
       return { ok: true, id: agenteId, mensaje: id ? 'Agente actualizado exitosamente' : 'Agente creado exitosamente' };
     } catch (error) {
@@ -77,8 +81,10 @@ function registerSaldosIPC() {
   ipcMain.handle('saldos:eliminarAgente', async (event, id) => {
     try {
       const now = new Date().toISOString();
-      await dbRun("UPDATE Propietarios SET id_agente = NULL, updated_at = ?, sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END WHERE id_agente = ?", [now, id]);
-      await dbRun("UPDATE Agentes SET deleted_at = ?, updated_at = ?, sync_status = 'pending_delete' WHERE id = ?", [now, now, id]);
+      await dbTransaction(async () => {
+        await dbRun("UPDATE Propietarios SET id_agente = NULL, updated_at = ?, sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END WHERE id_agente = ?", [now, id]);
+        await dbRun("UPDATE Agentes SET deleted_at = ?, updated_at = ?, sync_status = 'pending_delete' WHERE id = ?", [now, now, id]);
+      });
       return { ok: true, mensaje: 'Agente eliminado exitosamente' };
     } catch (error) {
       return { ok: false, error: error.message };
@@ -286,8 +292,9 @@ function registerSaldosIPC() {
   ipcMain.handle('saldos:guardarAporte', async (event, aporte) => {
     try {
       const { id, fecha, id_agente, id_propietario, monto, concepto, metodo_pago, referencia, notas } = aporte;
-      if (!fecha || !id_agente || !monto || Number(monto) <= 0) {
-        throw new Error('Fecha, agente y un monto mayor a 0 son obligatorios');
+      const montoFinal = parseMonto(monto);
+      if (!fecha || !id_agente || montoFinal <= 0) {
+        throw new Error('Fecha, agente y un monto válido mayor a 0 son obligatorios');
       }
       const now = new Date().toISOString();
 
@@ -299,14 +306,14 @@ function registerSaldosIPC() {
             updated_at = ?,
             sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
           WHERE id = ?
-        `, [fecha, Number(id_agente), id_propietario ? Number(id_propietario) : null, Number(monto), concepto || 'Entrega de Fondos', metodo_pago || 'Efectivo', referencia || '', notas || '', now, id]);
+        `, [fecha, Number(id_agente), id_propietario ? Number(id_propietario) : null, montoFinal, concepto || 'Entrega de Fondos', metodo_pago || 'Efectivo', referencia || '', notas || '', now, id]);
         return { ok: true, mensaje: 'Entrega de fondos actualizada exitosamente' };
       } else {
         const uuid = crypto.randomUUID();
         const res = await dbRun(`
           INSERT INTO Aportes_Propietarios (uuid, fecha, id_agente, id_propietario, monto, concepto, metodo_pago, referencia, notas, updated_at, sync_status)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_insert')
-        `, [uuid, fecha, Number(id_agente), id_propietario ? Number(id_propietario) : null, Number(monto), concepto || 'Entrega de Fondos', metodo_pago || 'Efectivo', referencia || '', notas || '', now]);
+        `, [uuid, fecha, Number(id_agente), id_propietario ? Number(id_propietario) : null, montoFinal, concepto || 'Entrega de Fondos', metodo_pago || 'Efectivo', referencia || '', notas || '', now]);
         return { ok: true, id: res.lastID, uuid, mensaje: 'Entrega de fondos registrada exitosamente' };
       }
     } catch (error) {

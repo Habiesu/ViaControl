@@ -509,7 +509,8 @@ function LiquidacionSemanalView({ catalogos, showToast, onSubtitleChange }) {
             <div style={{ fontSize: '14px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px', color: 'var(--text-main)' }}>
               1. Detalle de Viajes Realizados ({liquidacionData.viajes.length})
             </div>
-            <div className="table-container" style={{ overflow: 'visible' }}>
+            {/* Altura máxima con scroll propio (como IER); al imprimir, @media print la quita y salen todos los viajes */}
+            <div className="table-container" style={{ maxHeight: '420px', overflowY: 'auto' }}>
               <table className="data-table" style={{ width: '100%' }}>
                 <thead>
                   <tr>
@@ -608,14 +609,14 @@ function LiquidacionSemanalView({ catalogos, showToast, onSubtitleChange }) {
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Descontado de la liquidación</span>
             </div>
 
-            <div style={{ background: 'linear-gradient(145deg, #093322 0%, #062217 100%)', padding: '18px', borderRadius: 'var(--radius-md)', border: '2px solid var(--accent-emerald)' }}>
-              <span className="calc-metric-label" style={{ color: '#86efac', fontWeight: 700 }}>
+            <div className="card-total-neto">
+              <span className="calc-metric-label total-neto-label">
                 ⭐ TOTAL NETO A COBRAR
               </span>
-              <div className="calc-metric-value emerald" style={{ fontSize: '26px' }}>
+              <div className="calc-metric-value emerald total-neto-value">
                 {formatUSD(liquidacionData.resumen.netoALiquidar)}
               </div>
-              <span style={{ fontSize: '11px', color: '#a7f3d0' }}>Monto final a cancelar al chofer</span>
+              <span className="total-neto-sub">Monto final a cancelar al chofer</span>
             </div>
           </div>
         </div>

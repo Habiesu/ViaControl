@@ -143,22 +143,40 @@ function registerCatalogosIPC() {
     try {
       const { id, nombre, cedula, telefono, porcentaje_comision = 10.0, activo = 1, id_propietario } = chofer;
       if (!nombre) throw new Error('El nombre del chofer es obligatorio.');
+      const nuevoNombre = nombre.trim();
       const now = new Date().toISOString();
 
       if (id) {
+        // Consultar nombre previo para actualización en cascada si fue renombrado
+        const choferPrev = await dbGet("SELECT nombre FROM Choferes WHERE id = ?", [id]);
+        if (choferPrev && choferPrev.nombre && choferPrev.nombre !== nuevoNombre) {
+          await dbRun(
+            `UPDATE Viajes SET id_chofer = ?, updated_at = ?,
+              sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
+             WHERE id_chofer = ?`,
+            [nuevoNombre, now, choferPrev.nombre]
+          );
+          await dbRun(
+            `UPDATE Gastos_Extra SET id_chofer = ?, updated_at = ?,
+              sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
+             WHERE id_chofer = ?`,
+            [nuevoNombre, now, choferPrev.nombre]
+          );
+        }
+
         await dbRun(
           `UPDATE Choferes SET
             nombre = ?, cedula = ?, telefono = ?, porcentaje_comision = ?, activo = ?, id_propietario = ?, updated_at = ?,
             sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
           WHERE id = ?`,
-          [nombre.trim(), cedula || '', telefono || '', Number(porcentaje_comision) || 10, activo ? 1 : 0, id_propietario || null, now, id]
+          [nuevoNombre, cedula || '', telefono || '', Number(porcentaje_comision) || 10, activo ? 1 : 0, id_propietario || null, now, id]
         );
         return { ok: true, mensaje: 'Chofer actualizado' };
       } else {
         const uuid = crypto.randomUUID();
         const res = await dbRun(
           "INSERT INTO Choferes (uuid, nombre, cedula, telefono, porcentaje_comision, activo, id_propietario, updated_at, sync_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_insert')",
-          [uuid, nombre.trim(), cedula || '', telefono || '', Number(porcentaje_comision) || 10, activo ? 1 : 0, id_propietario || null, now]
+          [uuid, nuevoNombre, cedula || '', telefono || '', Number(porcentaje_comision) || 10, activo ? 1 : 0, id_propietario || null, now]
         );
         return { ok: true, id: res.lastID, uuid, mensaje: 'Chofer registrado' };
       }
@@ -203,6 +221,23 @@ function registerCatalogosIPC() {
       }
 
       if (id) {
+        // Consultar placa previa para actualización en cascada si fue cambiada
+        const gandolaPrev = await dbGet("SELECT placa FROM Gandolas WHERE id = ?", [id]);
+        if (gandolaPrev && gandolaPrev.placa && gandolaPrev.placa !== placaClean) {
+          await dbRun(
+            `UPDATE Viajes SET id_gandola = ?, updated_at = ?,
+              sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
+             WHERE id_gandola = ?`,
+            [placaClean, now, gandolaPrev.placa]
+          );
+          await dbRun(
+            `UPDATE Gastos_Extra SET id_gandola = ?, updated_at = ?,
+              sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
+             WHERE id_gandola = ?`,
+            [placaClean, now, gandolaPrev.placa]
+          );
+        }
+
         await dbRun(
           `UPDATE Gandolas SET
             placa = ?, modelo = ?, marca = ?, año = ?, capacidad = ?, activo = ?, id_propietario = ?, updated_at = ?,

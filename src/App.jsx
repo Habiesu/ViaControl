@@ -34,7 +34,7 @@ const NAV_GROUPS = [
 ];
 
 function AppContent({ onRegisterRefresh }) {
-  const { user, logout, syncStatus, triggerSync } = useAuth();
+  const { triggerSync } = useAuth();
   const [currentTab, setCurrentTab] = useState('nuevo-viaje');
   const [pageSubtitle, setPageSubtitle] = useState(null); // dynamic subtitle override
   const [catalogos, setCatalogos] = useState({
@@ -42,7 +42,6 @@ function AppContent({ onRegisterRefresh }) {
   });
   const [toasts, setToasts] = useState([]);
   const [theme, setTheme] = useState('light');
-  const [appVersion, setAppVersion] = useState('');
 
   // Cargar tema guardado al iniciar
   useEffect(() => {
@@ -51,8 +50,7 @@ function AppContent({ onRegisterRefresh }) {
     }).catch(() => setTheme('light'));
   }, []);
 
-  const toggleTheme = async () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
+  const cambiarTema = async (next) => {
     setTheme(next);
     await ipcRenderer.invoke('theme:set', next);
   };
@@ -75,9 +73,6 @@ function AppContent({ onRegisterRefresh }) {
 
   useEffect(() => {
     loadCatalogos();
-    ipcRenderer.invoke('ajustes:obtenerVersion').then(res => {
-      if (res && res.ok && res.version) setAppVersion(res.version);
-    }).catch(() => {});
 
     if (onRegisterRefresh) {
       onRegisterRefresh((count) => {
@@ -98,12 +93,10 @@ function AppContent({ onRegisterRefresh }) {
       {/* SIDEBAR */}
       <aside className="sidebar">
         <div className="sidebar-header">
-          <div className="brand-icon-wrap">
-            <span className="material-symbols-outlined">local_shipping</span>
-          </div>
+          <div className="brand-mark" aria-hidden="true"><i></i><i></i></div>
           <div>
             <div className="brand-title">ViaControl</div>
-            <div className="brand-subtitle">Telematics Core</div>
+            <div className="brand-subtitle">Gestión de flota</div>
           </div>
         </div>
 
@@ -129,77 +122,9 @@ function AppContent({ onRegisterRefresh }) {
           <div
             className={`nav-item ajustes-nav-btn ${currentTab === 'ajustes' ? 'active' : ''}`}
             onClick={() => handleTabChange('ajustes')}
-            style={{ marginBottom: '8px' }}
           >
             <span className="material-symbols-outlined">settings</span>
             <span>Ajustes</span>
-          </div>
-
-          {/* ESTADO DE SINCRONIZACIÓN SUPABASE */}
-          <div
-            className="status-chip"
-            onClick={triggerSync}
-            style={{ cursor: 'pointer', transition: 'all 0.2s', userSelect: 'none' }}
-            title={syncStatus.lastSync ? `Última sincronización: ${new Date(syncStatus.lastSync).toLocaleTimeString()} (Clic para sincronizar ahora)` : 'Clic para sincronizar con la nube'}
-          >
-            <span
-              className={`material-symbols-outlined ${syncStatus.syncing ? 'spinning' : ''}`}
-              style={{
-                fontSize: '16px',
-                color: syncStatus.syncing ? '#3b82f6' : (syncStatus.error ? '#f59e0b' : '#10b981')
-              }}
-            >
-              {syncStatus.syncing ? 'sync' : (syncStatus.error ? 'cloud_off' : 'cloud_done')}
-            </span>
-            <span style={{ fontSize: '11px', fontWeight: 500 }}>
-              {syncStatus.syncing
-                ? 'Sincronizando...'
-                : (syncStatus.pendingCount > 0
-                    ? `${syncStatus.pendingCount} pendientes`
-                    : 'Nube al día')}
-            </span>
-            <span style={{ marginLeft: 'auto', fontWeight: 600, fontSize: '11px', opacity: 0.8 }}>
-              {appVersion ? `v${appVersion}` : ''}
-            </span>
-          </div>
-
-          {/* PERFIL DE USUARIO Y LOGOUT */}
-          <div className="status-chip" style={{ justifyContent: 'space-between', padding: '6px 10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#3b82f6' }}>person</span>
-              <span
-                style={{
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                  textOverflow: 'ellipsis',
-                  overflow: 'hidden',
-                  maxWidth: '120px'
-                }}
-                title={user?.email || 'Usuario'}
-              >
-                {user?.email?.split('@')[0] || 'Operador'}
-              </span>
-            </div>
-            <button
-              onClick={logout}
-              title="Cerrar Sesión"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#94a3b8',
-                cursor: 'pointer',
-                padding: '2px 4px',
-                display: 'flex',
-                alignItems: 'center',
-                borderRadius: '4px',
-                transition: 'color 0.2s'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-              onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>logout</span>
-            </button>
           </div>
         </div>
       </aside>
@@ -217,17 +142,6 @@ function AppContent({ onRegisterRefresh }) {
             <h1>{pageSubtitle || tab?.label}</h1>
           </div>
           <div className="topbar-actions">
-            <button
-              id="theme-toggle"
-              className="theme-toggle-btn"
-              onClick={toggleTheme}
-              title={theme === 'dark' ? 'Cambiar a Tema Claro' : 'Cambiar a Tema Oscuro'}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
-                {theme === 'dark' ? 'light_mode' : 'dark_mode'}
-              </span>
-              <span>{theme === 'dark' ? 'Claro' : 'Oscuro'}</span>
-            </button>
             {currentTab !== 'nuevo-viaje' && (
               <button
                 className="btn btn-primary btn-sm btn-nuevo-viaje-top"
@@ -268,7 +182,7 @@ function AppContent({ onRegisterRefresh }) {
             )}
             {currentTab === 'rutas' && <RutasView {...viewProps} onActualizar={loadCatalogos} />}
             {currentTab === 'gastos_extra' && <GastosExtraView {...viewProps} />}
-            {currentTab === 'ajustes' && <AjustesView {...viewProps} />}
+            {currentTab === 'ajustes' && <AjustesView {...viewProps} theme={theme} onThemeChange={cambiarTema} />}
           </Suspense>
         </div>
       </main>

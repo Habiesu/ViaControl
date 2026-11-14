@@ -28,6 +28,13 @@ function HistorialViajesView({ catalogos, onActualizarCatalogos, showToast }) {
   });
   const [loading, setLoading] = useState(false);
 
+  // Estado importación Excel
+  const [importModal, setImportModal] = useState(false);
+  const [importFilas, setImportFilas] = useState(null);
+  const [importFilePath, setImportFilePath] = useState('');
+  const [importando, setImportando] = useState(false);
+  const [importResult, setImportResult] = useState(null); // { exitosos, errores }
+
   const getPropName = (idProp) => {
     if (!idProp) return '';
     const p = (catalogos.propietarios || []).find(pr => String(pr.id) === String(idProp));
@@ -236,6 +243,15 @@ function HistorialViajesView({ catalogos, onActualizarCatalogos, showToast }) {
             onClick={() => setFiltros({ busqueda: '', id_propietario: '', id_chofer: '', id_gandola: '', fecha_desde: '', fecha_hasta: '' })}
           >
             Restablecer
+          </button>
+
+          <button
+            className="btn btn-primary btn-sm"
+            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}
+            onClick={() => { setImportModal(true); setImportFilas(null); setImportResult(null); setImportFilePath(''); }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>upload_file</span>
+            Importar Excel
           </button>
         </div>
       </div>
@@ -532,6 +548,191 @@ function HistorialViajesView({ catalogos, onActualizarCatalogos, showToast }) {
               <button className="btn btn-danger" onClick={() => ejecutarEliminacionViaje(viajeAEliminar.id)}>
                 <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>delete</span> Confirmar y Eliminar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+          MODAL DE IMPORTACIÓN EXCEL
+      ═══════════════════════════════════════════════════════════════════ */}
+      {importModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(11,15,25,0.88)', backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
+        }}>
+          <div className="card" style={{ width: '720px', maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+
+            {/* Header */}
+            <div className="card-header" style={{ borderBottom: '1px solid var(--surface-variant)' }}>
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>upload_file</span>
+                Importar Viajes desde Excel
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setImportModal(false); setImportResult(null); setImportFilas(null); }}>
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ overflowY: 'auto', flex: 1, padding: '20px' }}>
+
+              {/* Resultado final */}
+              {importResult ? (
+                <div>
+                  <div style={{ display: 'flex', gap: '16px', marginBottom: '18px' }}>
+                    <div className="kpi-card" style={{ flex: 1, textAlign: 'center' }}>
+                      <div className="kpi-data">
+                        <span className="kpi-label">Importados</span>
+                        <span className="kpi-value" style={{ color: 'var(--primary)' }}>{importResult.exitosos}</span>
+                      </div>
+                    </div>
+                    <div className="kpi-card" style={{ flex: 1, textAlign: 'center' }}>
+                      <div className="kpi-data">
+                        <span className="kpi-label">Con errores</span>
+                        <span className="kpi-value" style={{ color: importResult.errores.length > 0 ? 'var(--tertiary)' : 'var(--primary)' }}>
+                          {importResult.errores.length}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {importResult.errores.length > 0 && (
+                    <>
+                      <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--tertiary)', marginBottom: '8px' }}>Filas con errores:</p>
+                      <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'var(--surface-variant)', borderRadius: '8px', padding: '10px' }}>
+                        {importResult.errores.map((e, i) => (
+                          <div key={i} style={{ fontSize: '12px', padding: '3px 0', color: 'var(--on-surface)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <strong>Fila {e.fila}:</strong> {e.error}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                    <button className="btn btn-secondary" onClick={() => { setImportModal(false); setImportResult(null); setImportFilas(null); cargarViajes(); }}>
+                      Cerrar y actualizar
+                    </button>
+                    <button className="btn btn-primary" onClick={() => { setImportResult(null); setImportFilas(null); setImportFilePath(''); }}>
+                      Importar otro archivo
+                    </button>
+                  </div>
+                </div>
+
+              ) : !importFilas ? (
+                /* Paso 1: Seleccionar archivo */
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ marginBottom: '24px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '56px', color: 'var(--primary)', opacity: 0.7 }}>table_chart</span>
+                    <p style={{ fontSize: '14px', color: 'var(--on-surface-variant)', marginTop: '8px' }}>
+                      Selecciona un archivo <strong>.xlsx</strong>, <strong>.xls</strong> o <strong>.csv</strong> con los viajes a importar.
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                      onClick={async () => {
+                        const res = await ipcRenderer.invoke('import:descargarPlantilla');
+                        if (res.canceled) return;
+                        if (res.ok) showToast(`Plantilla guardada: ${res.path}`);
+                        else showToast(res.error, 'error');
+                      }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span>
+                      Descargar Plantilla
+                    </button>
+
+                    <button
+                      className="btn btn-primary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                      onClick={async () => {
+                        const res = await ipcRenderer.invoke('import:seleccionarArchivo');
+                        if (res.canceled) return;
+                        if (!res.ok) { showToast(res.error, 'error'); return; }
+                        setImportFilas(res.filas);
+                        setImportFilePath(res.filePath);
+                      }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>folder_open</span>
+                      Seleccionar Archivo
+                    </button>
+                  </div>
+                </div>
+
+              ) : (
+                /* Paso 2: Previsualización */
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+                    <span className="material-symbols-outlined" style={{ color: 'var(--primary)', fontSize: '18px' }}>check_circle</span>
+                    <span style={{ fontSize: '13px', color: 'var(--on-surface)' }}>
+                      <strong>{importFilas.length}</strong> filas detectadas en: <em>{importFilePath.split(/[\/\\]/).pop()}</em>
+                    </span>
+                    <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setImportFilas(null); setImportFilePath(''); }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>edit</span> Cambiar
+                    </button>
+                  </div>
+
+                  {/* Mini tabla preview (max 5 filas) */}
+                  <div style={{ overflowX: 'auto', maxHeight: '220px', background: 'var(--surface-variant)', borderRadius: '8px', marginBottom: '16px' }}>
+                    <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr>
+                          {Object.keys(importFilas[0]).map(k => (
+                            <th key={k} style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--primary)', borderBottom: '1px solid var(--surface-variant)', whiteSpace: 'nowrap' }}>{k}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importFilas.slice(0, 5).map((row, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                            {Object.values(row).map((v, j) => (
+                              <td key={j} style={{ padding: '5px 8px', color: 'var(--on-surface)', whiteSpace: 'nowrap', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{String(v)}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {importFilas.length > 5 && (
+                      <p style={{ textAlign: 'center', fontSize: '11px', color: 'var(--on-surface-variant)', padding: '6px' }}>... y {importFilas.length - 5} filas más</p>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                    <button className="btn btn-secondary" onClick={() => setImportModal(false)} disabled={importando}>
+                      Cancelar
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                      disabled={importando}
+                      onClick={async () => {
+                        setImportando(true);
+                        try {
+                          const res = await ipcRenderer.invoke('import:procesarViajes', { filas: importFilas });
+                          setImportResult({ exitosos: res.exitosos, errores: res.errores });
+                          if (res.exitosos > 0) {
+                            showToast(`${res.exitosos} viajes importados correctamente`);
+                            cargarViajes();
+                          }
+                          if (res.errores.length > 0) showToast(`${res.errores.length} filas con errores`, 'error');
+                        } catch (err) {
+                          showToast('Error al procesar: ' + err.message, 'error');
+                        } finally {
+                          setImportando(false);
+                        }
+                      }}
+                    >
+                      {importando
+                        ? <><span className="material-symbols-outlined" style={{ fontSize: '16px', animation: 'spin 1s linear infinite' }}>progress_activity</span> Importando...</>
+                        : <><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>upload</span> Confirmar Importación</>}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

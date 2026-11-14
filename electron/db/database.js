@@ -26,6 +26,16 @@ function getDatabasePath() {
     }
   }
 
+  // Si la base de datos ya existe, generar un respaldo automático de seguridad (.bak)
+  if (fs.existsSync(dbFile)) {
+    try {
+      const backupFile = path.join(dataDir, 'gandolas_db.sqlite.bak');
+      fs.copyFileSync(dbFile, backupFile);
+    } catch (bkErr) {
+      console.warn('[DB] No se pudo crear backup preventivo:', bkErr.message);
+    }
+  }
+
   return dbFile;
 }
 
@@ -54,6 +64,22 @@ function dbAll(sql, params = []) {
       else resolve(rows || []);
     });
   });
+}
+
+async function dbTransaction(fn) {
+  await dbRun("BEGIN IMMEDIATE");
+  try {
+    const result = await fn();
+    await dbRun("COMMIT");
+    return result;
+  } catch (err) {
+    try {
+      await dbRun("ROLLBACK");
+    } catch (rbErr) {
+      console.warn('[DB] Error en ROLLBACK:', rbErr.message);
+    }
+    throw err;
+  }
 }
 
 async function initDatabase() {
@@ -325,6 +351,111 @@ async function initDatabase() {
     console.warn('[DB Migration] Error en migración de tipos de gasto:', migErr.message);
   }
 
+  // ─── MIGRACIÓN ADITIVA v1.3.5: RELACIONES UNIVERSALES POR UUID ───────────
+  try {
+    // 1. Columnas UUID relacionales si no existen
+    const colsChoferes = await dbAll(`PRAGMA table_info(Choferes)`);
+    if (!colsChoferes.some(c => c.name === 'propietario_uuid')) {
+      await dbRun(`ALTER TABLE Choferes ADD COLUMN propietario_uuid TEXT`);
+    }
+
+    const colsGandolas = await dbAll(`PRAGMA table_info(Gandolas)`);
+    if (!colsGandolas.some(c => c.name === 'propietario_uuid')) {
+      await dbRun(`ALTER TABLE Gandolas ADD COLUMN propietario_uuid TEXT`);
+    }
+
+    const colsPropietarios = await dbAll(`PRAGMA table_info(Propietarios)`);
+    if (!colsPropietarios.some(c => c.name === 'agente_uuid')) {
+      await dbRun(`ALTER TABLE Propietarios ADD COLUMN agente_uuid TEXT`);
+    }
+    if (!colsPropietarios.some(c => c.name === 'grupo_uuid')) {
+      await dbRun(`ALTER TABLE Propietarios ADD COLUMN grupo_uuid TEXT`);
+    }
+
+    const colsViajes = await dbAll(`PRAGMA table_info(Viajes)`);
+    if (!colsViajes.some(c => c.name === 'propietario_uuid')) {
+      await dbRun(`ALTER TABLE Viajes ADD COLUMN propietario_uuid TEXT`);
+    }
+
+    const colsGastos = await dbAll(`PRAGMA table_info(Gastos_Extra)`);
+    if (!colsGastos.some(c => c.name === 'propietario_uuid')) {
+      await dbRun(`ALTER TABLE Gastos_Extra ADD COLUMN propietario_uuid TEXT`);
+    }
+    if (!colsGastos.some(c => c.name === 'agente_uuid')) {
+      await dbRun(`ALTER TABLE Gastos_Extra ADD COLUMN agente_uuid TEXT`);
+    }
+    if (!colsGastos.some(c => c.name === 'viaje_uuid')) {
+      await dbRun(`ALTER TABLE Gastos_Extra ADD COLUMN viaje_uuid TEXT`);
+    }
+
+    const colsAportes = await dbAll(`PRAGMA table_info(Aportes_Propietarios)`);
+    if (!colsAportes.some(c => c.name === 'propietario_uuid')) {
+      await dbRun(`ALTER TABLE Aportes_Propietarios ADD COLUMN propietario_uuid TEXT`);
+    }
+    if (!colsAportes.some(c => c.name === 'agente_uuid')) {
+      await dbRun(`ALTER TABLE Aportes_Propietarios ADD COLUMN agente_uuid TEXT`);
+    }
+
+    // 2. Auto-poblado seguro de UUIDs para relaciones históricas locales
+    await dbRun(`
+      UPDATE Choferes
+      SET propietario_uuid = (SELECT uuid FROM Propietarios WHERE Propietarios.id = Choferes.id_propietario)
+      WHERE (propietario_uuid IS NULL OR propietario_uuid = '') AND id_propietario IS NOT NULL
+    `);
+    await dbRun(`
+      UPDATE Gandolas
+      SET propietario_uuid = (SELECT uuid FROM Propietarios WHERE Propietarios.id = Gandolas.id_propietario)
+      WHERE (propietario_uuid IS NULL OR propietario_uuid = '') AND id_propietario IS NOT NULL
+    `);
+    await dbRun(`
+      UPDATE Propietarios
+      SET agente_uuid = (SELECT uuid FROM Agentes WHERE Agentes.id = Propietarios.id_agente)
+      WHERE (agente_uuid IS NULL OR agente_uuid = '') AND id_agente IS NOT NULL
+    `);
+    await dbRun(`
+      UPDATE Viajes
+      SET propietario_uuid = (SELECT uuid FROM Propietarios WHERE Propietarios.id = Viajes.id_propietario)
+      WHERE (propietario_uuid IS NULL OR propietario_uuid = '') AND id_propietario IS NOT NULL
+    `);
+    await dbRun(`
+      UPDATE Gastos_Extra
+      SET propietario_uuid = (SELECT uuid FROM Propietarios WHERE Propietarios.id = Gastos_Extra.id_propietario)
+      WHERE (propietario_uuid IS NULL OR propietario_uuid = '') AND id_propietario IS NOT NULL
+    `);
+    await dbRun(`
+      UPDATE Gastos_Extra
+      SET agente_uuid = (SELECT uuid FROM Agentes WHERE Agentes.id = Gastos_Extra.id_agente)
+      WHERE (agente_uuid IS NULL OR agente_uuid = '') AND id_agente IS NOT NULL
+    `);
+    await dbRun(`
+      UPDATE Gastos_Extra
+      SET viaje_uuid = (SELECT uuid FROM Viajes WHERE Viajes.id = Gastos_Extra.id_viaje)
+      WHERE (viaje_uuid IS NULL OR viaje_uuid = '') AND id_viaje IS NOT NULL
+    `);
+    await dbRun(`
+      UPDATE Aportes_Propietarios
+      SET propietario_uuid = (SELECT uuid FROM Propietarios WHERE Propietarios.id = Aportes_Propietarios.id_propietario)
+      WHERE (propietario_uuid IS NULL OR propietario_uuid = '') AND id_propietario IS NOT NULL
+    `);
+    await dbRun(`
+      UPDATE Aportes_Propietarios
+      SET agente_uuid = (SELECT uuid FROM Agentes WHERE Agentes.id = Aportes_Propietarios.id_agente)
+      WHERE (agente_uuid IS NULL OR agente_uuid = '') AND id_agente IS NOT NULL
+    `);
+
+    // 3. Índices para acelerar resolución de relaciones por UUID
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_choferes_prop_uuid ON Choferes(propietario_uuid)`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_gandolas_prop_uuid ON Gandolas(propietario_uuid)`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_viajes_prop_uuid ON Viajes(propietario_uuid)`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_gastos_prop_uuid ON Gastos_Extra(propietario_uuid)`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_gastos_agente_uuid ON Gastos_Extra(agente_uuid)`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_gastos_viaje_uuid ON Gastos_Extra(viaje_uuid)`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_aportes_prop_uuid ON Aportes_Propietarios(propietario_uuid)`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_aportes_agente_uuid ON Aportes_Propietarios(agente_uuid)`);
+  } catch (uuidErr) {
+    console.warn('[DB Migration] Advertencia en migración de UUIDs relacionales:', uuidErr.message);
+  }
+
   const { seedInitialData, importRutasFromExcel } = require('./seeds');
   await seedInitialData();
   await importRutasFromExcel();
@@ -335,6 +466,7 @@ module.exports = {
   dbRun,
   dbGet,
   dbAll,
+  dbTransaction,
   getDatabasePath,
   SYNC_TABLES: [
     'Grupos_Propietarios',

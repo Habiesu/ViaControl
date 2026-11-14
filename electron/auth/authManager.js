@@ -161,13 +161,7 @@ async function checkIsAdminFromDB(user = null) {
     return true;
   }
 
-  // 2. Verificación por user_metadata (asignado al editar el usuario en Supabase Dashboard)
-  const userRole = u.user_metadata?.role;
-  if (userRole === 'admin' || u.user_metadata?.is_admin === true) {
-    console.log(`[AuthManager] Usuario ${u.email} identificado como ADMIN vía user_metadata.`);
-    cachedIsAdmin = true;
-    return true;
-  }
+  // user_metadata NO se usa: cualquier usuario puede editarlo con auth.updateUser().
 
   // 3. Verificación en la tabla 'usuarios_admin' en Supabase (por user_id o por email)
   try {
@@ -196,7 +190,7 @@ async function checkIsAdminFromDB(user = null) {
     console.warn('[AuthManager] Error al consultar tabla usuarios_admin en Supabase:', err.message);
   }
 
-  console.log(`[AuthManager] Usuario ${u.email} autenticado como estándar (no admin). Metadata:`, {
+  console.log(`[AuthManager] Usuario ${u.email} autenticado como estándar. Metadata:`, {
     app_metadata: u.app_metadata,
     user_metadata: u.user_metadata
   });
@@ -228,5 +222,6 @@ module.exports = {
   getUser,
   checkIsAdminFromDB,
   isAdmin,
-  getSupabaseClient
+  getSupabaseClient,
+  saveSessionToDisk
 };

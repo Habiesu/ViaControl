@@ -16,14 +16,8 @@ export const useAuth = () => useContext(AuthContext);
 
 function checkUserIsAdmin(u) {
   if (!u) return false;
-  const appRole = u.app_metadata?.role;
-  const userRole = u.user_metadata?.role;
-  return (
-    appRole === 'admin' ||
-    u.app_metadata?.is_admin === true ||
-    userRole === 'admin' ||
-    u.user_metadata?.is_admin === true
-  );
+  // Solo app_metadata: user_metadata lo puede editar el propio usuario.
+  return u.app_metadata?.role === 'admin' || u.app_metadata?.is_admin === true;
 }
 
 export default function AuthGuard({ children, onDataRefreshed }) {

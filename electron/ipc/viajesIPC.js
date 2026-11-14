@@ -1,6 +1,7 @@
 const { ipcMain } = require('electron');
 const crypto = require('crypto');
 const { dbAll, dbRun, dbGet } = require('../db/database');
+const { parseMonto, redondear2 } = require('../utils/numUtils');
 
 function registerViajesIPC() {
   ipcMain.handle('viajes:guardar', async (event, datosViaje) => {
@@ -25,8 +26,8 @@ function registerViajesIPC() {
       if (!id_chofer) throw new Error('El chofer asignado es obligatorio.');
       if (!id_gandola) throw new Error('La gandola asignada es obligatoria.');
 
-      let precioFinal = Number(precio_viaje);
-      if (!precioFinal || isNaN(precioFinal) || precioFinal <= 0) {
+      let precioFinal = parseMonto(precio_viaje);
+      if (precioFinal <= 0) {
         let ruta = await dbGet(
           "SELECT precio_base FROM Rutas WHERE UPPER(TRIM(origen)) = UPPER(TRIM(?)) AND UPPER(TRIM(destino)) = UPPER(TRIM(?)) AND activo = 1",
           [origen, destino]
@@ -38,7 +39,7 @@ function registerViajesIPC() {
           );
         }
         if (ruta && ruta.precio_base) {
-          precioFinal = Number(ruta.precio_base);
+          precioFinal = parseMonto(ruta.precio_base);
         } else {
           throw new Error(`No se encontró una tarifa configurada para la ruta "${origen}" ➔ "${destino}". Especifique un monto o registre la ruta.`);
         }
@@ -50,13 +51,13 @@ function registerViajesIPC() {
         comisionPct = Number(chofer.porcentaje_comision);
       }
 
-      const pagoChofer = Math.round(precioFinal * (comisionPct / 100) * 100) / 100;
-      const peajesNum = Math.round(Number(peajes || 0) * 100) / 100;
-      const viaticosNum = Math.round(Number(viaticos || 0) * 100) / 100;
-      const gasoilNum = Math.round(Number(gasoil || 0) * 100) / 100;
+      const pagoChofer = redondear2(precioFinal * (comisionPct / 100));
+      const peajesNum = parseMonto(peajes);
+      const viaticosNum = parseMonto(viaticos);
+      const gasoilNum = parseMonto(gasoil);
 
-      const totalGastos = Math.round((pagoChofer + peajesNum + viaticosNum + gasoilNum) * 100) / 100;
-      const ganancia = Math.round((precioFinal - totalGastos) * 100) / 100;
+      const totalGastos = redondear2(pagoChofer + peajesNum + viaticosNum + gasoilNum);
+      const ganancia = redondear2(precioFinal - totalGastos);
 
       let idPropFinal = datosViaje.id_propietario || null;
       if (!idPropFinal && id_chofer) {
@@ -181,7 +182,9 @@ function registerViajesIPC() {
     try {
       const now = new Date().toISOString();
       await dbRun("UPDATE Viajes SET deleted_at = ?, updated_at = ?, sync_status = 'pending_delete' WHERE id = ?", [now, now, id]);
-      return { ok: true, mensaje: 'Viaje eliminado' };
+      // Borrado en cascada para no dejar gastos huérfanos asociados al viaje
+      await dbRun("UPDATE Gastos_Extra SET deleted_at = ?, updated_at = ?, sync_status = 'pending_delete' WHERE id_viaje = ? AND (deleted_at IS NULL)", [now, now, id]);
+      return { ok: true, mensaje: 'Viaje y deducciones asociadas eliminados' };
     } catch (error) {
       return { ok: false, error: error.message };
     }

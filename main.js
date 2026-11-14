@@ -123,6 +123,9 @@ function createWindow() {
 // IPC para forzar re-enfoque de la ventana y webContents desde el renderer
 ipcMain.handle('app:refocusWindow', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
+    // Tras window.confirm/alert Electron cree que la ventana ya tiene foco y focus() no hace nada:
+    // blur() primero fuerza a Windows a devolver el foco de teclado real.
+    mainWindow.blur();
     mainWindow.focus();
     mainWindow.webContents.focus();
   }

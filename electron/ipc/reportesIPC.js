@@ -1,5 +1,6 @@
 const { ipcMain, app } = require('electron');
 const { dbAll, dbGet, getDatabasePath } = require('../db/database');
+const { parseMonto, redondear2 } = require('../utils/numUtils');
 
 function registerReportesIPC() {
   // Liquidación Semanal
@@ -37,14 +38,14 @@ function registerReportesIPC() {
       const choferInfo = await dbGet("SELECT * FROM Choferes WHERE nombre = ? AND (deleted_at IS NULL)", [id_chofer]);
 
       const totalViajes = viajes.length;
-      const fleteBrutoTotal = viajes.reduce((sum, v) => sum + (Number(v.precio_viaje) || 0), 0);
-      const totalPagoChofer = viajes.reduce((sum, v) => sum + (Number(v.pago_chofer) || 0), 0);
-      const totalViaticos = viajes.reduce((sum, v) => sum + (Number(v.viaticos) || 0), 0);
-      const totalGasoil = viajes.reduce((sum, v) => sum + (Number(v.gasoil) || 0), 0);
-      const totalPeajes = viajes.reduce((sum, v) => sum + (Number(v.peajes) || 0), 0);
+      const fleteBrutoTotal = viajes.reduce((sum, v) => sum + parseMonto(v.precio_viaje), 0);
+      const totalPagoChofer = viajes.reduce((sum, v) => sum + parseMonto(v.pago_chofer), 0);
+      const totalViaticos = viajes.reduce((sum, v) => sum + parseMonto(v.viaticos), 0);
+      const totalGasoil = viajes.reduce((sum, v) => sum + parseMonto(v.gasoil), 0);
+      const totalPeajes = viajes.reduce((sum, v) => sum + parseMonto(v.peajes), 0);
 
-      const totalDeducciones = deducciones.reduce((sum, d) => sum + (Number(d.monto) || 0), 0);
-      const netoALiquidar = Math.round((totalPagoChofer - totalDeducciones) * 100) / 100;
+      const totalDeducciones = deducciones.reduce((sum, d) => sum + parseMonto(d.monto), 0);
+      const netoALiquidar = redondear2(totalPagoChofer - totalDeducciones);
 
       return {
         ok: true,
@@ -185,18 +186,19 @@ function registerReportesIPC() {
       );
 
       const reporteGandolas = gandolas.map(g => {
-        const viajesUnidad = viajes.filter(v => v.id_gandola === g.placa);
-        const gastosTallerUnidad = gastosGandolas.filter(ge => ge.id_gandola === g.placa);
+        const gPlaca = String(g.placa || '').trim().toUpperCase();
+        const viajesUnidad = viajes.filter(v => String(v.id_gandola || '').trim().toUpperCase() === gPlaca);
+        const gastosTallerUnidad = gastosGandolas.filter(ge => String(ge.id_gandola || '').trim().toUpperCase() === gPlaca);
 
-        const fleteBruto = viajesUnidad.reduce((sum, v) => sum + (Number(v.precio_viaje) || 0), 0);
-        const gasoil = viajesUnidad.reduce((sum, v) => sum + (Number(v.gasoil) || 0), 0);
-        const peajes = viajesUnidad.reduce((sum, v) => sum + (Number(v.peajes) || 0), 0);
-        const viaticos = viajesUnidad.reduce((sum, v) => sum + (Number(v.viaticos) || 0), 0);
-        const pagoChofer = viajesUnidad.reduce((sum, v) => sum + (Number(v.pago_chofer) || 0), 0);
-        const gastosTaller = gastosTallerUnidad.reduce((sum, ge) => sum + (Number(ge.monto) || 0), 0);
+        const fleteBruto = viajesUnidad.reduce((sum, v) => sum + parseMonto(v.precio_viaje), 0);
+        const gasoil = viajesUnidad.reduce((sum, v) => sum + parseMonto(v.gasoil), 0);
+        const peajes = viajesUnidad.reduce((sum, v) => sum + parseMonto(v.peajes), 0);
+        const viaticos = viajesUnidad.reduce((sum, v) => sum + parseMonto(v.viaticos), 0);
+        const pagoChofer = viajesUnidad.reduce((sum, v) => sum + parseMonto(v.pago_chofer), 0);
+        const gastosTaller = gastosTallerUnidad.reduce((sum, ge) => sum + parseMonto(ge.monto), 0);
 
-        const gastosOperativos = Math.round((gasoil + peajes + viaticos + pagoChofer + gastosTaller) * 100) / 100;
-        const gananciaNeta = Math.round((fleteBruto - gastosOperativos) * 100) / 100;
+        const gastosOperativos = redondear2(gasoil + peajes + viaticos + pagoChofer + gastosTaller);
+        const gananciaNeta = redondear2(fleteBruto - gastosOperativos);
         const margenRentabilidad = fleteBruto > 0 ? Math.round((gananciaNeta / fleteBruto) * 1000) / 10 : 0;
 
         return {

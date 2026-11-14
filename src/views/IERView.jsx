@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { formatUSD } from '../utils/helpers.js';
 const { ipcRenderer } = window.require('electron');
 
 function formatGandolaLabel(g) {
@@ -150,6 +151,7 @@ function IERView({ catalogos, showToast }) {
         <td>${v.destino}<br><small>${v.origen}</small></td>
         <td>${v.id_chofer}</td>
         <td>${gandolaLabel}</td>
+        <td style="text-align:right">${formatUSD(v.precio_viaje)}</td>
         <td style="text-align:center">${entregado ? '✅' : '⬜'}</td>
         <td style="text-align:center">${pagado ? '✅' : '⬜'}</td>
       </tr>`;
@@ -183,6 +185,8 @@ function IERView({ catalogos, showToast }) {
     <div class="stat"><strong>${totalViajes - totalEntregados}</strong>No entregados</div>
     <div class="stat"><strong>${totalPagados}</strong>Pagados</div>
     <div class="stat"><strong>${totalViajes - totalPagados}</strong>Pendientes de cobro</div>
+    <div class="stat"><strong>${formatUSD(viajes.filter(v => v.pagado).reduce((s, v) => s + (Number(v.precio_viaje) || 0), 0))}</strong>Total cobrado</div>
+    <div class="stat"><strong>${formatUSD(viajes.reduce((s, v) => s + (Number(v.precio_viaje) || 0), 0))}</strong>Monto total</div>
   </div>
   <table>
     <thead>
@@ -192,6 +196,7 @@ function IERView({ catalogos, showToast }) {
         <th style="text-align:center">Ruta</th>
         <th style="text-align:center">Chofer</th>
         <th style="text-align:center">Gandola</th>
+        <th style="text-align:center">Monto</th>
         <th style="text-align:center">Entregado</th>
         <th style="text-align:center">Pagado</th>
       </tr>
@@ -214,6 +219,8 @@ function IERView({ catalogos, showToast }) {
   const totalEntregados = viajes.filter(v => v.entregado).length;
   const totalPagados = viajes.filter(v => v.pagado).length;
   const totalNoEntregados = viajes.filter(v => !v.entregado).length;
+  const montoTotal = viajes.reduce((s, v) => s + (Number(v.precio_viaje) || 0), 0);
+  const montoCobrado = viajes.filter(v => v.pagado).reduce((s, v) => s + (Number(v.precio_viaje) || 0), 0);
 
   return (
     <div>
@@ -349,6 +356,22 @@ function IERView({ catalogos, showToast }) {
           <span style={{ fontSize: '20px', fontWeight: 700, color: '#f87171' }}>{totalViajes - totalPagados}</span>
           <span style={{ fontSize: '11px', color: 'var(--on-surface)', opacity: 0.85 }}>Pendientes cobro</span>
         </div>
+        <div style={{
+          background: 'rgba(34, 197, 94, 0.14)', border: '1px solid rgba(34, 197, 94, 0.35)',
+          borderRadius: '8px', padding: '6px 14px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '120px'
+        }}>
+          <span className="mono" style={{ fontSize: '20px', fontWeight: 700, color: '#4ade80' }}>{formatUSD(montoCobrado)}</span>
+          <span style={{ fontSize: '11px', color: 'var(--on-surface)', opacity: 0.85 }}>Total cobrado</span>
+        </div>
+        <div style={{
+          background: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.35)',
+          borderRadius: '8px', padding: '6px 14px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '120px'
+        }}>
+          <span className="mono" style={{ fontSize: '20px', fontWeight: 700, color: '#60a5fa' }}>{formatUSD(montoTotal)}</span>
+          <span style={{ fontSize: '11px', color: 'var(--on-surface)', opacity: 0.85 }}>Monto total</span>
+        </div>
       </div>
 
       {/* LEYENDA */}
@@ -382,6 +405,7 @@ function IERView({ catalogos, showToast }) {
               <th style={{ textAlign: 'center' }}>Ruta</th>
               <th style={{ textAlign: 'center' }}>Chofer</th>
               <th style={{ textAlign: 'center' }}>Gandola</th>
+              <th style={{ textAlign: 'right' }}>Monto</th>
               <th style={{ textAlign: 'center', minWidth: '100px' }}>Entregado</th>
               <th style={{ textAlign: 'center', minWidth: '100px' }}>Pagado</th>
             </tr>
@@ -389,14 +413,14 @@ function IERView({ catalogos, showToast }) {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '36px', color: 'var(--primary)' }}>
+                <td colSpan="8" style={{ textAlign: 'center', padding: '36px', color: 'var(--primary)' }}>
                   <span className="material-symbols-outlined spinning" style={{ fontSize: '24px', verticalAlign: 'middle', marginRight: '8px' }}>sync</span>
                   Cargando...
                 </td>
               </tr>
             ) : viajes.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '36px', color: 'var(--on-surface-variant)' }}>
+                <td colSpan="8" style={{ textAlign: 'center', padding: '36px', color: 'var(--on-surface-variant)' }}>
                   No se encontraron viajes con los filtros seleccionados.
                 </td>
               </tr>
@@ -421,6 +445,9 @@ function IERView({ catalogos, showToast }) {
                   <td style={{ fontWeight: 500 }}>{v.id_chofer}</td>
                   <td className="mono" style={{ textAlign: 'center', fontWeight: 600 }}>
                     {gandolaDisplay}
+                  </td>
+                  <td className="mono" style={{ textAlign: 'right', fontWeight: 600 }}>
+                    {formatUSD(v.precio_viaje)}
                   </td>
 
                   {/* Toggle ENTREGADO */}

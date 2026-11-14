@@ -5,6 +5,7 @@ const { registerReportesIPC } = require('./reportesIPC');
 const { registerThemeIPC } = require('./themeIPC');
 const { registerSaldosIPC } = require('./saldosIPC');
 const { registerAjustesIPC } = require('./ajustesIPC');
+const { registerImportIPC } = require('./importIPC');
 const { registerAuthIPC } = require('../auth/authIPC');
 const { registerSyncIPC } = require('../sync/syncIPC');
 
@@ -18,6 +19,7 @@ function registerAllIPC() {
   registerAjustesIPC();
   registerAuthIPC();
   registerSyncIPC();
+  registerImportIPC();
 }
 
 module.exports = { registerAllIPC };

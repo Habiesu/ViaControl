@@ -1,6 +1,7 @@
 const { ipcMain } = require('electron');
 const crypto = require('crypto');
 const { dbAll, dbRun, dbGet } = require('../db/database');
+const { parseMonto } = require('../utils/numUtils');
 
 function registerGastosIPC() {
   ipcMain.handle('gastos-extra:listar', async (event, filtros = {}) => {
@@ -41,8 +42,9 @@ function registerGastosIPC() {
   ipcMain.handle('gastos-extra:guardar', async (event, gasto) => {
     try {
       const { id, fecha, id_chofer, id_gandola, id_viaje, id_propietario, id_agente, categoria, tipo, descripcion, monto } = gasto;
-      if (!fecha || !monto) {
-        throw new Error('Fecha y monto son requeridos');
+      const montoFinal = parseMonto(monto);
+      if (!fecha || montoFinal <= 0) {
+        throw new Error('Fecha y un monto válido mayor a 0 son requeridos');
       }
       const tipoVal = tipo || (categoria && categoria.includes('Chofer') ? 'Deduccion_Chofer' : 'Gasto_Empresa');
       const descVal = (descripcion && descripcion.trim()) ? descripcion.trim() : (categoria || 'Gasto de mantenimiento');
@@ -66,7 +68,7 @@ function registerGastosIPC() {
             updated_at = ?,
             sync_status = CASE WHEN sync_status = 'pending_insert' THEN 'pending_insert' ELSE 'pending_update' END
           WHERE id = ?
-        `, [fecha, id_chofer || null, id_gandola || null, id_viaje || null, idPropFinal, id_agente ? Number(id_agente) : null, categoria || 'General', tipoVal, descVal, Number(monto), now, id]);
+        `, [fecha, id_chofer || null, id_gandola || null, id_viaje || null, idPropFinal, id_agente ? Number(id_agente) : null, categoria || 'General', tipoVal, descVal, montoFinal, now, id]);
         return { ok: true, mensaje: 'Gasto extra actualizado' };
       } else {
         const uuid = crypto.randomUUID();
@@ -75,7 +77,7 @@ function registerGastosIPC() {
             uuid, fecha, id_chofer, id_gandola, id_viaje, id_propietario, id_agente,
             categoria, tipo, descripcion, monto, updated_at, sync_status
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_insert')
-        `, [uuid, fecha, id_chofer || null, id_gandola || null, id_viaje || null, idPropFinal, id_agente ? Number(id_agente) : null, categoria || 'General', tipoVal, descVal, Number(monto), now]);
+        `, [uuid, fecha, id_chofer || null, id_gandola || null, id_viaje || null, idPropFinal, id_agente ? Number(id_agente) : null, categoria || 'General', tipoVal, descVal, montoFinal, now]);
         return { ok: true, id: res.lastID, uuid, mensaje: 'Gasto extra registrado' };
       }
     } catch (error) {
