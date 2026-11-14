@@ -36,6 +36,19 @@ function registerSyncIPC() {
     }
   });
 
+  // Decisión del usuario en la primera sincronización de una PC con datos propios: 'mezclar' | 'reemplazar'
+  ipcMain.handle('sync:resolverPrimeraSync', async (event, modo) => {
+    try {
+      if (modo !== 'mezclar' && modo !== 'reemplazar') return { ok: false, error: 'Opción no válida' };
+      const sello = new Date().toISOString().replace(/[:.]/g, '-');
+      const rutaCopia = path.join(app.getPath('userData'), 'gandolas_data', `respaldo-antes-de-reemplazar-${sello}.sqlite`);
+      return await syncEngine.resolverPrimeraSincronizacion(modo, rutaCopia);
+    } catch (error) {
+      console.error('[SyncIPC] Error al resolver primera sincronización:', error);
+      return { ok: false, error: error.message };
+    }
+  });
+
   ipcMain.handle('sync:estado', async () => {
     try {
       const lastSync = await syncEngine.getLastSync();

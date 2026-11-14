@@ -1,6 +1,6 @@
 {
   "name": "ViaControl",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Sistema Integral de Gestión de Gandolas y Flota",
   "main": "dist-electron/main.js",
   "scripts": {

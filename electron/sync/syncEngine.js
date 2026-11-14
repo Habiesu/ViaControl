@@ -1,4 +1,4 @@
-const { dbAll, dbRun, dbGet, SYNC_TABLES } = require('../db/database');
+const { dbAll, dbRun, dbGet, dbTransaction, SYNC_TABLES } = require('../db/database');
 const authManager = require('../auth/authManager');
 
 const TABLE_MAPPING = {
@@ -150,33 +150,81 @@ async function pushChanges(supabase, userId) {
 /**
  * PULL: Descarga cambios remotos desde Supabase hacia SQLite
  */
-async function pullChanges(supabase, userId, lastSync) {
+/**
+ * Gandolas tiene placa UNIQUE local: si llega de la nube una gandola cuya placa ya existe aquí
+ * con otro uuid (se registró por separado en dos PCs), se fusionan en vez de fallar el INSERT.
+ * Devuelve true si la fila quedó resuelta.
+ */
+async function fusionarGandolaPorPlaca(remote, columns) {
+  if (!remote.placa) return false;
+  const existente = await dbGet('SELECT * FROM Gandolas WHERE placa = ?', [remote.placa]);
+  if (!existente) return false;
+
+  if (existente.sync_status !== 'pending_insert') {
+    // Ambas ya están en la nube con uuids distintos: no se puede fusionar desde aquí; se conserva la local.
+    console.warn(`[SyncEngine] Gandola placa "${remote.placa}" duplicada en la nube (uuids ${existente.uuid} / ${remote.uuid}); se conserva la local.`);
+    return true;
+  }
+
+  // La local nunca se subió: adopta el uuid de la nube (Viajes/Gastos la referencian por placa, no por uuid).
+  const remoteTime = new Date(remote.updated_at || 0).getTime();
+  const localTime = new Date(existente.updated_at || 0).getTime();
+  if (localTime > remoteTime) {
+    // La versión local es más reciente: se queda con sus datos y se sube como actualización de la fila de la nube.
+    await dbRun(`UPDATE Gandolas SET uuid = ?, sync_status = 'pending_update' WHERE id = ?`, [remote.uuid, existente.id]);
+  } else {
+    const setClauses = columns.map(c => `${c} = ?`);
+    setClauses.push('uuid = ?', 'updated_at = ?', 'deleted_at = ?', "sync_status = 'synced'");
+    const params = columns.map(c => remote[c] !== undefined ? remote[c] : null);
+    params.push(remote.uuid, remote.updated_at, remote.deleted_at || null, existente.id);
+    await dbRun(`UPDATE Gandolas SET ${setClauses.join(', ')} WHERE id = ?`, params);
+  }
+  return true;
+}
+
+/**
+ * Trae todas las filas de una tabla remota por páginas (Supabase devuelve como máximo 1000 por consulta;
+ * sin paginar, una tabla con más de 1000 viajes se descargaría incompleta). Lanza error si falla.
+ */
+const PAGINA = 1000;
+async function traerFilasRemotas(supabase, remoteTable, userId, lastSync) {
+  const filas = [];
+  for (let desde = 0; ; desde += PAGINA) {
+    let query = supabase.from(remoteTable).select('*').eq('user_id', userId);
+    if (lastSync) query = query.gt('updated_at', lastSync);
+    const { data, error } = await query.order('uuid').range(desde, desde + PAGINA - 1);
+    if (error) throw new Error(`${remoteTable}: ${error.message}`);
+    filas.push(...(data || []));
+    if (!data || data.length < PAGINA) return filas;
+  }
+}
+
+/**
+ * @param prefetched opcional { [tablaLocal]: filas[] } ya descargadas (usado por "Reemplazar con la nube")
+ */
+async function pullChanges(supabase, userId, lastSync, prefetched = null) {
   let pulledCount = 0;
+  let failedCount = 0;
 
   for (const localTable of SYNC_TABLES) {
     const remoteTable = TABLE_MAPPING[localTable];
     const columns = TABLE_COLUMNS[localTable];
 
     try {
-      let query = supabase
-        .from(remoteTable)
-        .select('*')
-        .eq('user_id', userId);
-
-      if (lastSync) {
-        query = query.gt('updated_at', lastSync);
-      }
-
-      const { data: remoteRows, error } = await query;
-
-      if (error) {
-        console.warn(`[SyncEngine] Error en pull para ${remoteTable}:`, error.message);
+      let remoteRows;
+      try {
+        remoteRows = prefetched ? (prefetched[localTable] || []) : await traerFilasRemotas(supabase, remoteTable, userId, lastSync);
+      } catch (fetchErr) {
+        failedCount++;
+        console.warn(`[SyncEngine] Error en pull para ${remoteTable}:`, fetchErr.message);
         continue;
       }
 
       if (!remoteRows || remoteRows.length === 0) continue;
 
       for (const rawRemote of remoteRows) {
+       // Cada fila por separado: un error ya no corta la descarga del resto de la tabla
+       try {
         const remote = await resolveLocalForeignKeys(localTable, rawRemote);
         const local = await dbGet(`SELECT * FROM ${localTable} WHERE uuid = ?`, [remote.uuid]);
 
@@ -199,6 +247,8 @@ async function pullChanges(supabase, userId, lastSync) {
             );
             pulledCount++;
           }
+        } else if (localTable === 'Gandolas' && await fusionarGandolaPorPlaca(remote, columns)) {
+          pulledCount++;
         } else {
           // No existe localmente: Insertar
           const allCols = ['uuid', 'user_id', 'updated_at', 'deleted_at', 'sync_status', ...columns];
@@ -218,19 +268,111 @@ async function pullChanges(supabase, userId, lastSync) {
           );
           pulledCount++;
         }
+       } catch (rowErr) {
+        failedCount++;
+        console.warn(`[SyncEngine] Error al descargar fila de ${localTable} (uuid: ${rawRemote.uuid}):`, rowErr.message);
+       }
       }
     } catch (tblErr) {
+      failedCount++;
       console.warn(`[SyncEngine] Excepción en pull de tabla ${localTable}:`, tblErr.message);
     }
   }
 
-  return pulledCount;
+  return { pulledCount, failedCount };
+}
+
+// ─── Primera sincronización de una PC con datos propios ──────────────────────
+const CLAVE_DECISION = 'primera_sync_resuelta';
+// Rutas no cuenta para decidir si preguntar: la app crea ~100 rutas de ejemplo en cada PC nueva.
+const TABLAS_QUE_DISPARAN = SYNC_TABLES.filter(t => t !== 'Rutas');
+
+/**
+ * Devuelve un resumen si esta PC nunca sincronizó, tiene datos propios sin subir y la nube también tiene datos;
+ * en ese caso hay que preguntar al usuario si mezclar o reemplazar. Si no, devuelve null.
+ */
+async function analizarPrimeraSincronizacion(supabase, userId) {
+  if (await getLastSync()) return null;
+  if (await dbGet('SELECT value FROM SyncMeta WHERE key = ?', [CLAVE_DECISION])) return null;
+
+  const local = {}; const nube = {};
+  for (const t of SYNC_TABLES) {
+    const r = await dbGet(`SELECT COUNT(*) as cnt FROM ${t} WHERE deleted_at IS NULL AND sync_status IN ('pending_insert', 'pending_update')`);
+    local[t] = r?.cnt || 0;
+    const { count, error } = await supabase
+      .from(TABLE_MAPPING[t]).select('uuid', { count: 'exact', head: true })
+      .eq('user_id', userId).is('deleted_at', null);
+    if (error) throw new Error(error.message);
+    nube[t] = count || 0;
+  }
+  const totalLocal = TABLAS_QUE_DISPARAN.reduce((s, t) => s + local[t], 0);
+  const totalNube = SYNC_TABLES.reduce((s, t) => s + nube[t], 0);
+  if (totalLocal === 0 || totalNube === 0) return null;
+  return { local, nube, totalLocal, totalNube };
+}
+
+async function marcarDecisionTomada(modo) {
+  await dbRun(
+    "INSERT INTO SyncMeta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    [CLAVE_DECISION, `${modo} ${new Date().toISOString()}`]
+  );
+}
+
+/**
+ * Borra los datos sincronizables de esta PC y los reemplaza por los de la nube.
+ * Orden seguro: 1) descargar todo a memoria (si falla, no se toca nada), 2) copia de seguridad de la BD,
+ * 3) borrar + insertar en una sola transacción (si alguna fila falla, se deshace todo).
+ */
+async function reemplazarConNube(supabase, userId, rutaCopia) {
+  const prefetched = {};
+  for (const t of SYNC_TABLES) {
+    prefetched[t] = await traerFilasRemotas(supabase, TABLE_MAPPING[t], userId, null);
+  }
+
+  await dbRun('VACUUM INTO ?', [rutaCopia]);
+
+  const inicio = new Date().toISOString();
+  const pulled = await dbTransaction(async () => {
+    for (const t of SYNC_TABLES) await dbRun(`DELETE FROM ${t}`);
+    const { pulledCount, failedCount } = await pullChanges(supabase, userId, null, prefetched);
+    if (failedCount > 0) throw new Error(`${failedCount} registro(s) de la nube no se pudieron cargar; no se cambió nada.`);
+    return pulledCount;
+  });
+  await setLastSync(inicio);
+  return pulled;
+}
+
+/**
+ * Aplica la decisión del usuario ('mezclar' | 'reemplazar') y sincroniza.
+ */
+async function resolverPrimeraSincronizacion(modo, rutaCopia) {
+  if (isSyncing) return { ok: false, error: 'Sincronización en curso', syncing: true };
+  const user = authManager.getUser();
+  if (!user || !user.id) return { ok: false, error: 'No hay usuario autenticado' };
+
+  if (modo === 'reemplazar') {
+    isSyncing = true;
+    try {
+      const pulled = await reemplazarConNube(authManager.getSupabaseClient(), user.id, rutaCopia);
+      await marcarDecisionTomada(modo);
+      return { ok: true, pulled, pushed: 0, lastSync: await getLastSync(), pendingCount: await getPendingCount(), reemplazado: true, rutaCopia };
+    } catch (error) {
+      console.warn('[SyncEngine] No se pudo reemplazar con la nube:', error.message);
+      return { ok: false, error: error.message, pendingCount: await getPendingCount() };
+    } finally {
+      isSyncing = false;
+    }
+  }
+
+  if (modo !== 'mezclar') return { ok: false, error: `Modo desconocido: ${modo}` };
+  await marcarDecisionTomada(modo);
+  return sync({ saltarAnalisis: true });
 }
 
 /**
  * Ejecutar Sincronización Completa Bidireccional
  */
-async function sync() {
+async function sync({ saltarAnalisis = false } = {}) {
   if (isSyncing) {
     return { ok: false, error: 'Sincronización en curso', syncing: true };
   }
@@ -252,17 +394,29 @@ async function sync() {
       console.warn('[SyncEngine] Advertencia al validar sesión proactiva:', tokenErr.message);
     }
 
+    // 0. Primera sincronización con datos en ambos lados: no tocar nada hasta que el usuario decida
+    if (!saltarAnalisis) {
+      const resumen = await analizarPrimeraSincronizacion(supabase, user.id);
+      if (resumen) {
+        return { ok: false, requiereDecision: true, resumen, pendingCount: await getPendingCount() };
+      }
+    }
+
     const lastSync = await getLastSync();
     const syncStartTime = new Date().toISOString();
 
     // 1. PULL primero (trae datos nuevos de otras computadoras)
-    const pulled = await pullChanges(supabase, user.id, lastSync);
+    const { pulledCount: pulled, failedCount } = await pullChanges(supabase, user.id, lastSync);
 
     // 2. PUSH segundo (sube cambios locales pendientes a la nube)
     const pushed = await pushChanges(supabase, user.id);
 
-    // 3. Actualizar timestamp de última sincronización
-    await setLastSync(syncStartTime);
+    // 3. Avanzar la marca solo si todo bajó bien; si no, las filas fallidas se reintentan la próxima vez
+    if (failedCount === 0) {
+      await setLastSync(syncStartTime);
+    } else {
+      console.warn(`[SyncEngine] ${failedCount} fila(s) no se pudieron descargar; se reintentarán en la próxima sincronización.`);
+    }
 
     const pending = await getPendingCount();
 
@@ -270,7 +424,7 @@ async function sync() {
       ok: true,
       pushed,
       pulled,
-      lastSync: syncStartTime,
+      lastSync: failedCount === 0 ? syncStartTime : lastSync,
       pendingCount: pending
     };
   } catch (error) {
@@ -290,5 +444,6 @@ async function sync() {
 module.exports = {
   sync,
   getLastSync,
-  getPendingCount
+  getPendingCount,
+  resolverPrimeraSincronizacion
 };
