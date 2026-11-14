@@ -1,6 +1,6 @@
 {
   "name": "ViaControl",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Sistema Integral de Gestión de Gandolas y Flota",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -44,9 +44,11 @@
     "appId": "com.viacontrol.app",
     "productName": "ViaControl",
     "directories": {
-      "output": "dist-release"
+      "output": "dist-release",
+      "buildResources": "build"
     },
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -63,7 +65,17 @@
       "createStartMenuShortcut": true,
       "shortcutName": "ViaControl",
       "uninstallDisplayName": "ViaControl - Gestión de Flota y Transporte",
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
+      "installerLanguages": [
+        "es_ES"
+      ],
+      "language": "3082"
     },
     "publish": {
       "provider": "github",
