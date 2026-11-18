@@ -1,5 +1,6 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import LoginView from '../views/LoginView.jsx';
+import Modal from './Modal.jsx';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -50,9 +51,11 @@ function DecisionPrimeraSync({ resumen, onResuelto, onPosponer }) {
     }
   };
 
+  // Esc: en la confirmación vuelve atrás; en la elección pospone. Mientras sincroniza no se puede cerrar.
+  const alCerrar = trabajando ? undefined : (paso === 'confirmar' ? () => setPaso('elegir') : onPosponer);
+
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="primera-sync-titulo">
-      <div className="modal-card" style={{ padding: '24px', gap: '16px', maxWidth: '560px' }}>
+    <Modal labelledBy="primera-sync-titulo" onClose={alCerrar} style={{ padding: '24px', gap: '16px', maxWidth: '560px' }}>
         {paso === 'elegir' ? (
           <>
             <h2 id="primera-sync-titulo" style={{ fontSize: '18px' }}>Esta computadora y la nube tienen datos distintos</h2>
@@ -79,7 +82,7 @@ function DecisionPrimeraSync({ resumen, onResuelto, onPosponer }) {
             </button>
 
             <button className="btn btn-sm" style={{ background: 'transparent', color: 'var(--on-surface-variant)', alignSelf: 'center' }}
-              disabled={trabajando} onClick={onPosponer}>
+              disabled={trabajando} onClick={onPosponer} data-autofocus>
               Decidir más tarde (no se sincroniza nada)
             </button>
           </>
@@ -92,7 +95,7 @@ function DecisionPrimeraSync({ resumen, onResuelto, onPosponer }) {
               Si la descarga falla, no se borra nada.
             </p>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button className="btn btn-secondary" disabled={trabajando} onClick={() => setPaso('elegir')}>Volver</button>
+              <button className="btn btn-secondary" disabled={trabajando} onClick={() => setPaso('elegir')} autoFocus>Volver</button>
               <button className="btn btn-danger-solid" disabled={trabajando} onClick={() => resolver('reemplazar')}>
                 <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>delete</span>
                 Sí, borrar y descargar
@@ -103,8 +106,7 @@ function DecisionPrimeraSync({ resumen, onResuelto, onPosponer }) {
 
         {trabajando && <p style={{ fontSize: '13px', color: 'var(--primary)' }} role="status">Sincronizando con la nube…</p>}
         {error && <p style={{ fontSize: '13px', color: 'var(--error)' }} role="alert">{error}</p>}
-      </div>
-    </div>
+    </Modal>
   );
 }
 

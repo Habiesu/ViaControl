@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import Modal from '../components/Modal.jsx';
 import { formatUSD, getTodayString, getDateRangePresets } from '../utils/helpers.js';
 const { ipcRenderer } = window.require('electron');
 
@@ -363,13 +364,12 @@ function HistorialViajesView({ catalogos, onActualizarCatalogos, showToast }) {
 
       {/* MODAL PARA EDITAR VIAJE */}
       {viajeAEditar && (
-        <div className="modal-overlay" onClick={() => setViajeAEditar(null)}>
-          <div className="modal-card" style={{ maxWidth: '700px' }} onClick={e => e.stopPropagation()}>
+        <Modal onClose={() => setViajeAEditar(null)} cerrarAlClicFuera labelledBy="editar-viaje-titulo" style={{ maxWidth: '700px' }}>
             <div className="modal-header">
-              <div style={{ fontWeight: 700, fontSize: '16px' }}>
+              <div id="editar-viaje-titulo" style={{ fontWeight: 700, fontSize: '16px' }}>
                 Modificar Registro de Viaje #{viajeAEditar.id}
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={() => setViajeAEditar(null)}>✕</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setViajeAEditar(null)} aria-label="Cerrar">✕</button>
             </div>
             <form onSubmit={guardarEdicionViaje}>
               <div className="modal-body">
@@ -382,6 +382,7 @@ function HistorialViajesView({ catalogos, onActualizarCatalogos, showToast }) {
                       value={viajeAEditar.fecha}
                       onChange={e => setViajeAEditar({ ...viajeAEditar, fecha: e.target.value })}
                       required
+                      data-autofocus
                     />
                   </div>
 
@@ -513,25 +514,14 @@ function HistorialViajesView({ catalogos, onActualizarCatalogos, showToast }) {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* MODAL CONFIRMACIÓN DE ELIMINACIÓN */}
       {viajeAEliminar && (
-        <div className="modal-overlay" style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(11, 15, 25, 0.85)',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999
-        }}>
-          <div className="card" style={{ maxWidth: '440px', width: '90%', border: '1px solid var(--tertiary)' }}>
+        <Modal onClose={() => setViajeAEliminar(null)} labelledBy="eliminar-viaje-titulo" className="card" style={{ maxWidth: '440px', width: '90%', border: '1px solid var(--tertiary)' }}>
             <div className="card-header">
-              <div className="card-title" style={{ color: 'var(--tertiary)' }}>
+              <div id="eliminar-viaje-titulo" className="card-title" style={{ color: 'var(--tertiary)' }}>
                 <span className="material-symbols-outlined" style={{ verticalAlign: 'middle', marginRight: '6px' }}>warning</span>
                 Confirmar Eliminación
               </div>
@@ -542,35 +532,34 @@ function HistorialViajesView({ catalogos, onActualizarCatalogos, showToast }) {
             </div>
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
-              <button className="btn btn-secondary" onClick={() => setViajeAEliminar(null)}>
+              <button className="btn btn-secondary" onClick={() => setViajeAEliminar(null)} data-autofocus>
                 Cancelar
               </button>
               <button className="btn btn-danger" onClick={() => ejecutarEliminacionViaje(viajeAEliminar.id)}>
                 <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>delete</span> Confirmar y Eliminar
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════
           MODAL DE IMPORTACIÓN EXCEL
       ═══════════════════════════════════════════════════════════════════ */}
       {importModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(11,15,25,0.88)', backdropFilter: 'blur(6px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
-        }}>
-          <div className="card" style={{ width: '720px', maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+        <Modal
+          onClose={importando ? undefined : () => { setImportModal(false); setImportResult(null); setImportFilas(null); }}
+          labelledBy="importar-viajes-titulo"
+          className="card"
+          style={{ width: '720px', maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
+        >
 
             {/* Header */}
             <div className="card-header" style={{ borderBottom: '1px solid var(--surface-variant)' }}>
-              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div id="importar-viajes-titulo" className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>upload_file</span>
                 Importar Viajes desde Excel
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => { setImportModal(false); setImportResult(null); setImportFilas(null); }}>
+              <button className="btn btn-ghost btn-sm" aria-label="Cerrar" onClick={() => { setImportModal(false); setImportResult(null); setImportFilas(null); }}>
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
@@ -734,8 +723,7 @@ function HistorialViajesView({ catalogos, onActualizarCatalogos, showToast }) {
                 </div>
               )}
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

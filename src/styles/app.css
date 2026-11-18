@@ -1884,3 +1884,21 @@ button, .btn { font-weight: 600; font-size: 0.82rem; }
 .light-mode .btn-danger-solid:hover:not(:disabled) { background: #991b1b; border-color: #991b1b; }
 /* En modo claro el borde gris de btn-secondary se confunde con el fondo del modal */
 .light-mode .modal-card .btn-secondary { border-color: var(--outline); }
+
+/* Modales nativos (<dialog> + showModal, ver components/Modal.jsx) */
+dialog.modal-dialog {
+  position: fixed;   /* .modal-card trae position: relative, que rompería el centrado del top layer */
+  inset: 0;
+  margin: auto;
+  height: fit-content;
+  max-width: min(540px, calc(100vw - 40px));
+  color: var(--on-surface);
+  overscroll-behavior: contain;
+}
+dialog.modal-dialog:not([open]) { display: none; }
+dialog.modal-dialog::backdrop {
+  background: rgba(10, 14, 23, 0.75);
+  backdrop-filter: blur(2px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}

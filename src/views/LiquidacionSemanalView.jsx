@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import Modal from '../components/Modal.jsx';
 import { formatUSD, getTodayString, getDateRangePresets, parseTelefono, buildTelefono, PREFIJOS_VZLA } from '../utils/helpers.js';
 const { ipcRenderer } = window.require('electron');
 
@@ -623,13 +624,12 @@ function LiquidacionSemanalView({ catalogos, showToast, onSubtitleChange }) {
       )}
 
       {showAdelantoModal && (
-        <div className="modal-overlay" onClick={() => setShowAdelantoModal(false)}>
-          <div className="modal-card" onClick={e => e.stopPropagation()}>
+        <Modal onClose={() => setShowAdelantoModal(false)} cerrarAlClicFuera labelledBy="adelanto-titulo">
             <div className="modal-header">
-              <div style={{ fontWeight: 700, fontSize: '16px' }}>
+              <div id="adelanto-titulo" style={{ fontWeight: 700, fontSize: '16px' }}>
                 <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>add</span> Registrar Adelanto a: {idChofer}
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowAdelantoModal(false)}>✕</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowAdelantoModal(false)} aria-label="Cerrar">✕</button>
             </div>
             <form onSubmit={guardarAdelanto}>
               <div className="modal-body">
@@ -641,6 +641,7 @@ function LiquidacionSemanalView({ catalogos, showToast, onSubtitleChange }) {
                     value={adelantoForm.fecha}
                     onChange={e => setAdelantoForm({ ...adelantoForm, fecha: e.target.value })}
                     required
+                    data-autofocus
                   />
                 </div>
 
@@ -679,8 +680,7 @@ function LiquidacionSemanalView({ catalogos, showToast, onSubtitleChange }) {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
       </div>
     )}

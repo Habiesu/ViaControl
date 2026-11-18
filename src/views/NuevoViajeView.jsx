@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import Modal from '../components/Modal.jsx';
 import { formatUSD, getTodayString, getDateRangePresets, parseTelefono, buildTelefono, PREFIJOS_VZLA } from '../utils/helpers.js';
 const { ipcRenderer } = window.require('electron');
 
@@ -491,13 +492,12 @@ function NuevoViajeView({ catalogos, onViajeGuardado, onActualizarCatalogos, sho
 
       {/* MODAL RÁPIDO PARA NUEVA RUTA */}
       {modalNuevaRuta && (
-        <div className="modal-overlay" onClick={() => setModalNuevaRuta(false)}>
-          <div className="modal-card" onClick={e => e.stopPropagation()}>
+        <Modal onClose={() => setModalNuevaRuta(false)} cerrarAlClicFuera labelledBy="nueva-ruta-titulo">
             <div className="modal-header">
-              <div style={{ fontWeight: 700, fontSize: '16px' }}>
+              <div id="nueva-ruta-titulo" style={{ fontWeight: 700, fontSize: '16px' }}>
                 <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>add</span> Agregar Nueva Ruta al Catálogo
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={() => setModalNuevaRuta(false)}>✕</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setModalNuevaRuta(false)} aria-label="Cerrar">✕</button>
             </div>
             <form onSubmit={guardarNuevaRuta}>
               <div className="modal-body">
@@ -510,6 +510,7 @@ function NuevoViajeView({ catalogos, onViajeGuardado, onActualizarCatalogos, sho
                     value={nuevaRutaForm.origen}
                     onChange={e => setNuevaRutaForm({ ...nuevaRutaForm, origen: e.target.value })}
                     required
+                    data-autofocus
                   />
                 </div>
 
@@ -548,8 +549,7 @@ function NuevoViajeView({ catalogos, onViajeGuardado, onActualizarCatalogos, sho
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
