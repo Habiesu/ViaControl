@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { formatUSD, getTodayString, getDateRangePresets, parseTelefono, buildTelefono, PREFIJOS_VZLA } from '../utils/helpers.js';
+import ImportVerificacionRutas from '../components/import/ImportVerificacionRutas.jsx';
 const { ipcRenderer } = window.require('electron');
 
 function RutasView({ catalogos, onActualizar, showToast }) {
@@ -8,6 +9,7 @@ function RutasView({ catalogos, onActualizar, showToast }) {
   const [busqueda, setBusqueda] = useState('');
   const [rutaForm, setRutaForm] = useState({ id: null, origen: 'Puerto Cabello', destino: '', precio_base: '' });
   const [sincronizando, setSincronizando] = useState(false);
+  const [importRutas, setImportRutas] = useState(null); // { filas, filePath }
 
   const cargarRutas = async () => {
     try {
@@ -25,16 +27,12 @@ function RutasView({ catalogos, onActualizar, showToast }) {
   const sincronizarDesdeExcel = async () => {
     setSincronizando(true);
     try {
-      const res = await ipcRenderer.invoke('rutas:importar-excel');
-      if (res.ok) {
-        showToast(`¡Excel Sincronizado! ${res.totalImportados} rutas nuevas y ${res.totalActualizados} actualizadas.`);
-        await cargarRutas();
-        await onActualizar();
-      } else {
-        showToast(res.error || 'No se pudo sincronizar el archivo Excel', 'error');
-      }
+      const res = await ipcRenderer.invoke('import:rutasSeleccionarArchivo');
+      if (res.canceled) return;
+      if (res.ok) setImportRutas({ filas: res.filas, filePath: res.filePath });
+      else showToast(res.error || 'No se pudo leer el archivo Excel', 'error');
     } catch (err) {
-      showToast('Error al importar Excel: ' + err.message, 'error');
+      showToast('Error al leer el Excel: ' + err.message, 'error');
     } finally {
       setSincronizando(false);
     }
@@ -101,7 +99,7 @@ function RutasView({ catalogos, onActualizar, showToast }) {
               <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>analytics</span> Catálogo Dinámico de Precios por Origen y Destino
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-              Base de datos cargada directamente desde <strong>Listas_de_Precios_Fletes.xlsx</strong> (Hojas: La Guaira, Puerto Cabello, Guanta).
+              Importa una lista de precios en Excel (cada hoja es un origen; columna A destino, columna B precio). Antes de guardar verás qué rutas son nuevas y qué precios cambian.
             </div>
           </div>
 
@@ -111,7 +109,7 @@ function RutasView({ catalogos, onActualizar, showToast }) {
             onClick={sincronizarDesdeExcel}
             disabled={sincronizando}
           >
-            {sincronizando ? 'Leyendo Excel...' : 'Sincronizar / Reimportar Excel'}
+            {sincronizando ? 'Leyendo Excel...' : 'Importar tarifas desde Excel'}
           </button>
         </div>
       </div>
@@ -287,6 +285,39 @@ function RutasView({ catalogos, onActualizar, showToast }) {
           </div>
         </div>
       </div>
+
+      {importRutas && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(11,15,25,0.88)', backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
+        }}>
+          <div className="card" style={{ width: '1100px', maxWidth: '97vw', height: '92vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="card-header" style={{ borderBottom: '1px solid var(--surface-variant)' }}>
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="material-symbols-outlined" style={{ color: 'var(--primary)' }}>upload_file</span>
+                Verificar importación de tarifas
+              </div>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, padding: '12px 20px', display: 'flex', flexDirection: 'column' }}>
+              <ImportVerificacionRutas
+                key={importRutas.filePath}
+                filasIniciales={importRutas.filas}
+                nombreArchivo={importRutas.filePath.split(/[\/\\]/).pop()}
+                onCambiarArchivo={() => { setImportRutas(null); sincronizarDesdeExcel(); }}
+                onCancelar={() => setImportRutas(null)}
+                onImportado={async (res) => {
+                  setImportRutas(null);
+                  showToast(`Tarifas importadas: ${res.nuevas} rutas nuevas y ${res.actualizadas} precios actualizados.`);
+                  await cargarRutas();
+                  await onActualizar();
+                }}
+                showToast={showToast}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

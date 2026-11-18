@@ -1,7 +1,6 @@
 const { ipcMain } = require('electron');
 const crypto = require('crypto');
 const { dbAll, dbRun, dbGet } = require('../db/database');
-const { importRutasFromExcel } = require('../db/seeds');
 
 function registerCatalogosIPC() {
   ipcMain.handle('catalogos:obtener', async () => {
@@ -76,10 +75,6 @@ function registerCatalogosIPC() {
   });
 
   // Rutas CRUD
-  ipcMain.handle('rutas:importar-excel', async () => {
-    return await importRutasFromExcel();
-  });
-
   ipcMain.handle('rutas:listar', async () => {
     try {
       const rutas = await dbAll("SELECT * FROM Rutas WHERE (deleted_at IS NULL) ORDER BY id DESC");

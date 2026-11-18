@@ -1,6 +1,6 @@
 # Plan: importación desde Excel con lista de verificación
 
-> Estado: planificado, sin empezar. Para trabajarlo en el ordenador.
+> Estado: fases 1, 2 y 3 implementadas (pendiente de probar en Windows con datos reales). La fase 4 queda opcional.
 > Idea: antes de guardar nada, la app abre un modal con todas las filas del Excel. En cada fila
 > decides si se añade tal cual, si la corriges o si la descartas. Solo se guarda lo que apruebes.
 
@@ -121,9 +121,21 @@ Rendimiento: un Excel puede tener cientos de filas. Hay que paginar (por ejemplo
 - Comprobar que si falla una fila a mitad de la confirmación no queda nada guardado a medias.
 - Comprobar que los viajes importados suben a Supabase en la siguiente sincronización.
 
-## 6. Decisiones pendientes (para hablar en el ordenador)
-1. ¿Se permite **crear choferes y gandolas** desde el modal, o solo elegir los que ya existen?
-2. Si falta el **pago del chofer**: ¿usar el % de comisión de ese chofer (lo que hace el registro manual) o dejarlo como error?
-3. ¿Qué cuenta como **duplicado**: mismo contenedor, o misma fecha + gandola + destino?
-4. ¿Las filas con **aviso** vienen marcadas o desmarcadas por defecto?
-5. ¿Hace falta **deshacer una importación** completa (fase 4)?
+## 6. Decisiones tomadas al implementar (se pueden cambiar)
+1. **Crear choferes y gandolas desde el modal:** sí, con botón "Crear" por fila o "Crear y usar en las N filas". Se crean con comisión del 10 % y sin propietario; hay que completar sus datos después.
+2. **Pago del chofer vacío:** se calcula con el % de comisión de ese chofer (como en el registro manual) y se avisa. Si el Excel trae el pago, se respeta.
+3. **Duplicado:** mismo contenedor, o misma fecha + gandola + chofer + destino. Vale contra los viajes guardados y dentro del propio archivo.
+4. **Filas con aviso:** vienen marcadas. Las duplicadas vienen desmarcadas y las de error no se pueden marcar hasta corregirlas.
+5. **Propietario:** si se deja vacío se toma el del chofer o, si no tiene, el de la gandola. Si se escribe uno que no existe es error.
+6. **Deshacer una importación:** no implementado (fase 4).
+
+## 7. Lo que se hizo
+| Parte | Archivos |
+|---|---|
+| Lógica de análisis sin Electron ni BD (probada) | `electron/import/viajesImport.js`, `electron/import/rutasImport.js` |
+| Canales IPC: analizar (no guarda) y confirmar (transacción) | `electron/ipc/importIPC.js` (`import:analizarViajes`, `import:confirmarViajes`, `import:rutasSeleccionarArchivo`, `import:rutasAnalizar`, `import:rutasConfirmar`) |
+| Modales de verificación | `src/components/import/ImportVerificacionViajes.jsx`, `src/components/import/ImportVerificacionRutas.jsx`, estilos `.imp-*` en `src/styles/app.css` |
+| Pantallas | `src/views/HistorialViajesView.jsx`, `src/views/RutasView.jsx` |
+| Pruebas | `tests/*.test.js` (`npm test`, sin dependencias nuevas) |
+
+Pendiente aparte: al arrancar, `initDatabase` sigue ejecutando `importRutasFromExcel()` con el Excel incluido en el instalador, que sobrescribe precios sin preguntar ni marcarlos para sincronizar. No se ha tocado porque puede que se use para distribuir tarifas con cada versión.
