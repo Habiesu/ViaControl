@@ -93,8 +93,8 @@ function DecisionPrimeraSync({ resumen, onResuelto, onPosponer }) {
             </p>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button className="btn btn-secondary" disabled={trabajando} onClick={() => setPaso('elegir')}>Volver</button>
-              <button className="btn btn-danger" disabled={trabajando} onClick={() => resolver('reemplazar')}>
-                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>delete_sweep</span>
+              <button className="btn btn-danger-solid" disabled={trabajando} onClick={() => resolver('reemplazar')}>
+                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>delete</span>
                 Sí, borrar y descargar
               </button>
             </div>

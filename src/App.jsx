@@ -50,6 +50,9 @@ function AppContent({ onRegisterRefresh }) {
     }).catch(() => setTheme('light'));
   }, []);
 
+  // También en <body>: los modales de AuthGuard se dibujan fuera de .app-container
+  useEffect(() => { document.body.classList.toggle('light-mode', theme === 'light'); }, [theme]);
+
   const cambiarTema = async (next) => {
     setTheme(next);
     await ipcRenderer.invoke('theme:set', next);

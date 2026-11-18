@@ -1876,3 +1876,11 @@ button, .btn { font-weight: 600; font-size: 0.82rem; }
   background: rgba(90, 240, 179, 0.12);
   color: var(--primary);
 }
+
+/* Botón de acción destructiva final (confirmaciones) */
+.btn-danger-solid { background: #ffb4ab; color: #690005; border: 1px solid #ffb4ab; font-weight: 600; }
+.btn-danger-solid:hover:not(:disabled) { background: #ff9e93; border-color: #ff9e93; }
+.light-mode .btn-danger-solid { background: #b91c1c; color: #ffffff; border-color: #b91c1c; }
+.light-mode .btn-danger-solid:hover:not(:disabled) { background: #991b1b; border-color: #991b1b; }
+/* En modo claro el borde gris de btn-secondary se confunde con el fondo del modal */
+.light-mode .modal-card .btn-secondary { border-color: var(--outline); }
