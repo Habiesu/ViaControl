@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import DatePicker from '../components/DatePicker.jsx';
+import DateRangePicker from '../components/DateRangePicker.jsx';
 import Modal from '../components/Modal.jsx';
 import { formatUSD, getTodayString, getDateRangePresets, parseTelefono, buildTelefono, PREFIJOS_VZLA } from '../utils/helpers.js';
 const { ipcRenderer } = window.require('electron');
@@ -46,11 +48,6 @@ function LiquidacionSemanalView({ catalogos, showToast, onSubtitleChange }) {
     if (idChofer) cargarLiquidacion();
   }, [idChofer, fechaInicio, fechaFin]);
 
-  const aplicarRangoRapido = (preset) => {
-    const rango = getDateRangePresets(preset);
-    setFechaInicio(rango.inicio);
-    setFechaFin(rango.fin);
-  };
 
   const guardarAdelanto = async (e) => {
     e.preventDefault();
@@ -125,11 +122,6 @@ function LiquidacionSemanalView({ catalogos, showToast, onSubtitleChange }) {
     }
   }, [tabActiva]);
 
-  const aplicarRangoRapidoP = (preset) => {
-    const r = getDateRangePresets(preset);
-    setFechaInicioP(r.inicio);
-    setFechaFinP(r.fin);
-  };
 
   return (
     <div>
@@ -165,18 +157,8 @@ function LiquidacionSemanalView({ catalogos, showToast, onSubtitleChange }) {
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Desde</label>
-                <input type="date" className="form-input" value={fechaInicioP} onChange={e => setFechaInicioP(e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Hasta</label>
-                <input type="date" className="form-input" value={fechaFinP} onChange={e => setFechaFinP(e.target.value)} />
-              </div>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => aplicarRangoRapidoP('esta_semana')}>Esta Semana</button>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => aplicarRangoRapidoP('semana_anterior')}>Semana Pasada</button>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => aplicarRangoRapidoP('mes_actual')}>Este Mes</button>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => aplicarRangoRapidoP('mes_anterior')}>Mes Anterior</button>
+                <span className="form-label">Período</span>
+                <DateRangePicker desde={fechaInicioP} hasta={fechaFinP} onChange={(d, h) => { setFechaInicioP(d); setFechaFinP(h); }} />
               </div>
               <button className="btn btn-primary" onClick={cargarResumenProp} disabled={loadingProp}>
                 <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>search</span> {loadingProp ? 'Cargando...' : 'Consultar'}
@@ -396,7 +378,7 @@ function LiquidacionSemanalView({ catalogos, showToast, onSubtitleChange }) {
       {tabActiva === 'chofer' && (
       <div>
       <div className="card no-print" style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'flex-end' }}>
             <div className="form-group" style={{ minWidth: '220px' }}>
               <label className="form-label">Chofer a Liquidar *</label>
@@ -415,39 +397,12 @@ function LiquidacionSemanalView({ catalogos, showToast, onSubtitleChange }) {
 
 
             <div className="form-group">
-              <label className="form-label">Período Desde</label>
-              <input
-                type="date"
-                className="form-input"
-                value={fechaInicio}
-                onChange={e => setFechaInicio(e.target.value)}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Período Hasta</label>
-              <input
-                type="date"
-                className="form-input"
-                value={fechaFin}
-                onChange={e => setFechaFin(e.target.value)}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => aplicarRangoRapido('esta_semana')}>
-                Esta Semana
-              </button>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => aplicarRangoRapido('semana_anterior')}>
-                Semana Pasada
-              </button>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => aplicarRangoRapido('mes_actual')}>
-                Este Mes
-              </button>
+              <span className="form-label">Período</span>
+              <DateRangePicker desde={fechaInicio} hasta={fechaFin} onChange={(d, h) => { setFechaInicio(d); setFechaFin(h); }} />
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
             <button type="button" className="btn btn-secondary" onClick={() => setShowAdelantoModal(true)}>
               <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>add</span> Registrar Adelanto
             </button>
@@ -635,9 +590,7 @@ function LiquidacionSemanalView({ catalogos, showToast, onSubtitleChange }) {
               <div className="modal-body">
                 <div className="form-group">
                   <label className="form-label">Fecha *</label>
-                  <input
-                    type="date"
-                    className="form-input"
+                  <DatePicker
                     value={adelantoForm.fecha}
                     onChange={e => setAdelantoForm({ ...adelantoForm, fecha: e.target.value })}
                     required

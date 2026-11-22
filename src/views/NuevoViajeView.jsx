@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import DatePicker from '../components/DatePicker.jsx';
 import Modal from '../components/Modal.jsx';
 import { formatUSD, getTodayString, getDateRangePresets, parseTelefono, buildTelefono, PREFIJOS_VZLA } from '../utils/helpers.js';
 const { ipcRenderer } = window.require('electron');
@@ -248,9 +249,7 @@ function NuevoViajeView({ catalogos, onViajeGuardado, onActualizarCatalogos, sho
         <div className="grid-form-3col">
           <div className="form-group">
             <label className="form-label">Fecha del Viaje *</label>
-            <input
-              type="date"
-              className="form-input"
+            <DatePicker
               value={formData.fecha}
               onChange={e => setFormData({ ...formData, fecha: e.target.value })}
               required

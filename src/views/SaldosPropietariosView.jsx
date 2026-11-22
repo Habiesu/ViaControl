@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import DatePicker from '../components/DatePicker.jsx';
+import DateRangePicker from '../components/DateRangePicker.jsx';
 import { formatUSD, getTodayString, escapeHtml } from '../utils/helpers';
 
 const { ipcRenderer } = window.require('electron');
@@ -371,9 +373,7 @@ function SeccionAporteDirecto({ isOpen, onClose, initialAgenteId, agentes, onGua
 
           <div>
             <label className="form-label">Fecha de Entrega *</label>
-            <input
-              type="date"
-              className="form-input"
+            <DatePicker
               value={formData.fecha}
               onChange={e => setFormData({ ...formData, fecha: e.target.value })}
               required
@@ -636,9 +636,7 @@ function SeccionGastoDirecto({ isOpen, onClose, initialAgenteId, agentes, catalo
 
           <div>
             <label className="form-label">Fecha del Gasto *</label>
-            <input
-              type="date"
-              className="form-input"
+            <DatePicker
               value={formData.fecha}
               onChange={e => setFormData({ ...formData, fecha: e.target.value })}
               required
@@ -1066,7 +1064,7 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
   return (
     <div>
       {/* TARJETAS DE KPIS SUPERIORES */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px', marginBottom: '8px' }}>
+      <div className="fila-tarjetas" style={{ gap: '8px', marginBottom: '8px' }}>
         <div style={{
           background: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.35)',
           borderRadius: '8px', padding: '8px 14px', display: 'flex', flexDirection: 'column'
@@ -1498,23 +1496,8 @@ function SaldosPropietariosView({ catalogos = {}, onReloadCatalogos, mostrarToas
                 </select>
               </div>
 
-              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={filtros.fecha_desde}
-                  onChange={e => setFiltros({ ...filtros, fecha_desde: e.target.value })}
-                  title="Desde"
-                />
-                <span style={{ color: 'var(--on-surface-variant)' }}>a</span>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={filtros.fecha_hasta}
-                  onChange={e => setFiltros({ ...filtros, fecha_hasta: e.target.value })}
-                  title="Hasta"
-                />
-              </div>
+              <DateRangePicker permitirVacio desde={filtros.fecha_desde} hasta={filtros.fecha_hasta}
+                onChange={(d, h) => setFiltros({ ...filtros, fecha_desde: d, fecha_hasta: h })} />
 
               <button
                 className="btn btn-secondary btn-sm"

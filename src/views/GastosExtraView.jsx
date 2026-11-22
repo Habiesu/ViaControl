@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import DatePicker from '../components/DatePicker.jsx';
+import DateRangePicker from '../components/DateRangePicker.jsx';
 import { formatUSD, getTodayString, getDateRangePresets } from '../utils/helpers.js';
 const { ipcRenderer } = window.require('electron');
 
@@ -40,7 +42,6 @@ function GastosExtraView({ catalogos, showToast }) {
   const [filtroCategoria, setFiltroCategoria] = useState('');
   const [filtroAgente, setFiltroAgente] = useState('');
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
-  const [presetFecha, setPresetFecha] = useState('todo');
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
 
@@ -100,30 +101,13 @@ function GastosExtraView({ catalogos, showToast }) {
     return Array.from(new Set([...defaultCats, ...fromGastos]));
   }, [gastos]);
 
-  const cambiarPresetFecha = (preset) => {
-    setPresetFecha(preset);
-    if (preset === 'este-mes') {
-      const r = getDateRangePresets('este-mes');
-      setFechaDesde(r.desde || r.inicio);
-      setFechaHasta(r.hasta || r.fin);
-    } else if (preset === 'mes-anterior') {
-      const r = getDateRangePresets('mes-anterior');
-      setFechaDesde(r.desde || r.inicio);
-      setFechaHasta(r.hasta || r.fin);
-    } else if (preset === 'todo') {
-      setFechaDesde('');
-      setFechaHasta('');
-    }
-  };
-
   const hayFiltrosActivos = !!(
     filtroGandola ||
     filtroCategoria ||
     filtroAgente ||
     filtroBusqueda ||
     fechaDesde ||
-    fechaHasta ||
-    presetFecha !== 'todo'
+    fechaHasta
   );
 
   const limpiarFiltros = () => {
@@ -131,7 +115,8 @@ function GastosExtraView({ catalogos, showToast }) {
     setFiltroCategoria('');
     setFiltroAgente('');
     setFiltroBusqueda('');
-    cambiarPresetFecha('todo');
+    setFechaDesde('');
+    setFechaHasta('');
   };
 
   // Filtrado reactivo en memoria
@@ -320,9 +305,7 @@ function GastosExtraView({ catalogos, showToast }) {
           <form onSubmit={guardarGasto}>
             <div className="form-group" style={{ marginBottom: '14px' }}>
               <label className="form-label">Fecha *</label>
-              <input
-                type="date"
-                className="form-input"
+              <DatePicker
                 value={gastoForm.fecha}
                 onChange={e => setGastoForm({ ...gastoForm, fecha: e.target.value })}
                 required
@@ -471,7 +454,7 @@ function GastosExtraView({ catalogos, showToast }) {
         </div>
 
         {/* COLUMNA DERECHA: BARRA DE FILTROS + TABLA */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', minWidth: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', minWidth: 0, alignSelf: 'stretch' }}>
           
           {/* BARRA DE FILTROS */}
           <div className="card" style={{ padding: '16px' }}>
@@ -545,20 +528,8 @@ function GastosExtraView({ catalogos, showToast }) {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--outline-variant)', paddingTop: '12px' }}>
               
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div className="radio-tabs" style={{ borderRadius: '6px', overflow: 'hidden' }}>
-                  <div className={`radio-tab ${presetFecha === 'todo' ? 'active' : ''}`} style={{ padding: '0 12px', fontSize: '11px', cursor: 'pointer' }} onClick={() => cambiarPresetFecha('todo')}>Todo</div>
-                  <div className={`radio-tab ${presetFecha === 'este-mes' ? 'active' : ''}`} style={{ padding: '0 12px', fontSize: '11px', cursor: 'pointer' }} onClick={() => cambiarPresetFecha('este-mes')}>Este Mes</div>
-                  <div className={`radio-tab ${presetFecha === 'mes-anterior' ? 'active' : ''}`} style={{ padding: '0 12px', fontSize: '11px', cursor: 'pointer' }} onClick={() => cambiarPresetFecha('mes-anterior')}>Mes Ant.</div>
-                  <div className={`radio-tab ${presetFecha === 'personalizado' ? 'active' : ''}`} style={{ padding: '0 12px', fontSize: '11px', cursor: 'pointer' }} onClick={() => setPresetFecha('personalizado')}>Pers.</div>
-                </div>
-
-                {presetFecha === 'personalizado' && (
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    <input type="date" className="form-input" style={{ width: '130px' }} value={fechaDesde} onChange={e => { setPresetFecha('personalizado'); setFechaDesde(e.target.value); }} />
-                    <span style={{ color: 'var(--outline)' }}>-</span>
-                    <input type="date" className="form-input" style={{ width: '130px' }} value={fechaHasta} onChange={e => { setPresetFecha('personalizado'); setFechaHasta(e.target.value); }} />
-                  </div>
-                )}
+                <DateRangePicker permitirVacio desde={fechaDesde} hasta={fechaHasta}
+                  onChange={(d, h) => { setFechaDesde(d); setFechaHasta(h); }} />
 
                 {hayFiltrosActivos && (
                   <button
@@ -591,7 +562,8 @@ function GastosExtraView({ catalogos, showToast }) {
           </div>
 
           {/* TABLA DE GASTOS */}
-          <div className="table-container" style={{ maxHeight: '460px', overflowY: 'auto' }}>
+          {/* Ocupa el alto que deja el formulario de la izquierda; contain: size evita que las filas estiren la columna */}
+          <div className="table-container" style={{ flex: '1 1 0', minHeight: '320px', contain: 'size', overflowY: 'auto' }}>
             <table className="data-table">
               <thead>
                 <tr>

@@ -194,7 +194,7 @@ function RutasView({ catalogos, onActualizar, showToast }) {
           <div className="card" style={{ marginBottom: '16px', padding: '14px 18px' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
               {/* Selector de Origen (Pestañas Rápidas) */}
-              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
                 <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Origen:</span>
                 <button
                   type="button"

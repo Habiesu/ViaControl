@@ -1902,3 +1902,126 @@ dialog.modal-dialog::backdrop {
   overflow: hidden;
   overscroll-behavior: contain;
 }
+
+/* ─── Selector de rango de fechas (components/DateRangePicker.jsx) ─────────── */
+.drp { display: inline-block; }
+.drp-boton {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 36px; padding: 0 12px;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius);
+  color: var(--on-surface);
+  font: inherit; font-size: var(--text-body-md);
+  white-space: nowrap; cursor: pointer;
+}
+.drp-boton:hover, .drp-boton:focus-visible { border-color: var(--primary); }
+.drp-boton .material-symbols-outlined { font-size: 18px; color: var(--primary); }
+.drp-sep { color: var(--on-surface-variant); }
+
+.drp-panel {
+  padding: 0;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-body-md);
+}
+.drp-panel:popover-open { display: flex; }
+@supports (position-area: block-end) {
+  .drp-panel {
+    inset: auto; margin: 6px 0 0;
+    position-area: block-end span-inline-end;
+    position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+  }
+}
+
+.drp-atajos {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px; min-width: 170px;
+  border-right: 1px solid var(--outline-variant);
+}
+.drp-atajo {
+  display: block; width: 100%; text-align: start; padding: 8px 10px;
+  background: none; border: 0; border-radius: var(--radius);
+  color: var(--on-surface); font: inherit; cursor: pointer;
+}
+.drp-atajo:hover { background: var(--surface-container-highest); }
+.drp-atajo.activo { background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); font-weight: 600; }
+
+.drp-calendario { position: relative; display: flex; flex-wrap: wrap; gap: 24px; padding: 14px 18px 10px; }
+.drp-nav {
+  position: absolute; top: 10px;
+  width: 30px; height: 30px; display: grid; place-items: center;
+  background: none; border: 1px solid var(--outline-variant); border-radius: var(--radius);
+  color: var(--on-surface); cursor: pointer;
+}
+.drp-nav:hover { border-color: var(--primary); color: var(--primary); }
+.drp-nav.prev { inset-inline-start: 14px; }
+.drp-nav.next { inset-inline-end: 14px; }
+.drp-mes-titulo { text-align: center; font-weight: 700; line-height: 30px; margin-bottom: 8px; }
+.drp-grid { display: grid; grid-template-columns: repeat(7, 36px); row-gap: 2px; }
+.drp-dia-nombre { text-align: center; font-size: var(--text-label-md); color: var(--on-surface-variant); padding-bottom: 6px; }
+.drp-dia {
+  width: 100%; height: 34px; padding: 0; background: none; border: 0;
+  color: var(--on-surface); font: inherit; cursor: pointer; border-radius: 50%;
+}
+.drp-dia:hover { background: var(--surface-container-highest); }
+.drp-dia.en-rango { background: color-mix(in srgb, var(--primary) 18%, transparent); border-radius: 0; }
+.drp-dia.en-rango.inicio { border-start-start-radius: 50%; border-end-start-radius: 50%; }
+.drp-dia.en-rango.fin { border-start-end-radius: 50%; border-end-end-radius: 50%; }
+.drp-dia.extremo { background: var(--primary); color: var(--on-primary); font-weight: 700; border-radius: 50%; }
+.light-mode .drp-panel { background: #ffffff; }
+.light-mode .drp-nav, .light-mode .drp-boton { border-color: var(--outline); }
+.drp-ayuda { flex-basis: 100%; margin: 0; font-size: var(--text-label-md); color: var(--on-surface-variant); }
+
+/* ─── Campo de fecha suelta (components/DatePicker.jsx) ────────────────────── */
+.dp {
+  display: flex; align-items: center;
+  height: 36px; width: 100%; padding: 0 10px;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.light-mode .dp { border-color: var(--outline); }
+.dp:hover, .dp:focus-within { border-color: var(--primary); }
+.dp-input {
+  field-sizing: content;
+  border: 0; outline: none; background: transparent; padding: 0;
+  color: var(--on-surface); font: inherit; font-size: var(--text-body-md);
+  cursor: text;
+}
+.dp-input::-webkit-calendar-picker-indicator { display: none; }
+.dp-input::-webkit-datetime-edit-day-field,
+.dp-input::-webkit-datetime-edit-month-field,
+.dp-input::-webkit-datetime-edit-year-field { padding: 2px 3px; border-radius: 4px; }
+.dp-input::-webkit-datetime-edit-day-field:hover,
+.dp-input::-webkit-datetime-edit-month-field:hover,
+.dp-input::-webkit-datetime-edit-year-field:hover { background: color-mix(in srgb, var(--primary) 14%, transparent); }
+.dp-input::-webkit-datetime-edit-day-field:focus,
+.dp-input::-webkit-datetime-edit-month-field:focus,
+.dp-input::-webkit-datetime-edit-year-field:focus { background: var(--primary); color: var(--on-primary); }
+.dp-input::-webkit-datetime-edit-text { color: var(--on-surface-variant); padding: 0 1px; }
+.dp-pie { flex-basis: 100%; display: flex; justify-content: flex-end; padding-top: 4px; }
+.drp-dia.hoy:not(.extremo) { box-shadow: inset 0 0 0 1px var(--primary); }
+
+/* ─── Diseño adaptable (revisión de tamaños de ventana) ─────────────────────── */
+/* Una columna de grid no encoge por debajo de su contenido (tablas anchas): permitirlo para que la tabla haga scroll dentro */
+.layout-grid-sidebar > * { min-width: 0; }
+/* Filas de tarjetas de cifras: se reparten el ancho y la última fila se estira (sin tarjetas sueltas) */
+.kpi-grid, .fila-tarjetas { display: flex !important; flex-wrap: wrap; }
+.kpi-grid > * { flex: 1 1 120px; min-width: 0; }
+.fila-tarjetas > * { flex: 1 1 160px; min-width: 0; }
+.fila-tarjetas.compacta > * { flex: 1 1 auto; min-width: 0 !important; } /* las tarjetas de IER traen minWidth en línea */
+@media (max-width: 1199px) {
+  .layout-grid-sidebar { grid-template-columns: minmax(0, 1fr) !important; }
+}
+@media (min-width: 1200px) and (max-width: 1280px) {
+  .layout-grid-sidebar { grid-template-columns: 320px minmax(0, 1fr); }
+}
+.fila-tarjetas.compacta > * > span:first-child { font-size: clamp(14px, 1.5vw, 20px) !important; white-space: nowrap; } /* la cifra encoge en ventanas estrechas */
+.fila-tarjetas.compacta > * { padding-inline: 8px !important; }
+::-webkit-scrollbar-corner { background: transparent; } /* esquina entre las dos barras de scroll (salía blanca en modo oscuro) */

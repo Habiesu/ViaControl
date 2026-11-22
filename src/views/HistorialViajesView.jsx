@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import DatePicker from '../components/DatePicker.jsx';
+import DateRangePicker from '../components/DateRangePicker.jsx';
 import Modal from '../components/Modal.jsx';
 import { formatUSD, getTodayString, getDateRangePresets } from '../utils/helpers.js';
 const { ipcRenderer } = window.require('electron');
@@ -221,23 +223,8 @@ function HistorialViajesView({ catalogos, onActualizarCatalogos, showToast }) {
             </select>
           </div>
 
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <input
-              type="date"
-              className="form-input"
-              value={filtros.fecha_desde}
-              onChange={e => setFiltros({ ...filtros, fecha_desde: e.target.value })}
-              title="Fecha Desde"
-            />
-            <span style={{ color: 'var(--on-surface-variant)' }}>a</span>
-            <input
-              type="date"
-              className="form-input"
-              value={filtros.fecha_hasta}
-              onChange={e => setFiltros({ ...filtros, fecha_hasta: e.target.value })}
-              title="Fecha Hasta"
-            />
-          </div>
+          <DateRangePicker permitirVacio desde={filtros.fecha_desde} hasta={filtros.fecha_hasta}
+            onChange={(d, h) => setFiltros({ ...filtros, fecha_desde: d, fecha_hasta: h })} />
 
           <button
             className="btn btn-secondary btn-sm"
@@ -376,9 +363,7 @@ function HistorialViajesView({ catalogos, onActualizarCatalogos, showToast }) {
                 <div className="grid-form">
                   <div className="form-group">
                     <label className="form-label">Fecha *</label>
-                    <input
-                      type="date"
-                      className="form-input"
+                    <DatePicker
                       value={viajeAEditar.fecha}
                       onChange={e => setViajeAEditar({ ...viajeAEditar, fecha: e.target.value })}
                       required

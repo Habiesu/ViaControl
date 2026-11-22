@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import DateRangePicker from '../components/DateRangePicker.jsx';
 import { formatUSD, escapeHtml } from '../utils/helpers.js';
 const { ipcRenderer } = window.require('electron');
 
@@ -278,13 +279,8 @@ function IERView({ catalogos, showToast }) {
           </div>
 
           {/* Fechas */}
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <input type="date" className="form-input" value={filtros.fecha_desde}
-              onChange={e => setFiltros({ ...filtros, fecha_desde: e.target.value })} title="Desde" />
-            <span style={{ color: 'var(--on-surface-variant)' }}>a</span>
-            <input type="date" className="form-input" value={filtros.fecha_hasta}
-              onChange={e => setFiltros({ ...filtros, fecha_hasta: e.target.value })} title="Hasta" />
-          </div>
+          <DateRangePicker permitirVacio desde={filtros.fecha_desde} hasta={filtros.fecha_hasta}
+            onChange={(d, h) => setFiltros({ ...filtros, fecha_desde: d, fecha_hasta: h })} />
 
           {/* Entregado */}
           <div style={{ minWidth: '120px' }}>
@@ -315,7 +311,7 @@ function IERView({ catalogos, showToast }) {
       </div>
 
       {/* RESUMEN RÁPIDO */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+      <div className="fila-tarjetas compacta" style={{ gap: '8px', marginBottom: '10px' }}>
         <div style={{
           background: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.35)',
           borderRadius: '8px', padding: '6px 14px',

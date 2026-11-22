@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import DateRangePicker from '../components/DateRangePicker.jsx';
 import { formatUSD, getTodayString, getDateRangePresets, parseTelefono, buildTelefono, PREFIJOS_VZLA } from '../utils/helpers.js';
 const { ipcRenderer } = window.require('electron');
 
@@ -121,21 +122,7 @@ function AnalisisMensualView({ catalogos, showToast }) {
             )}
 
             {tipoPeriodo === 'personalizado' && (
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: '6px' }}>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={fechaInicio}
-                  onChange={e => setFechaInicio(e.target.value)}
-                />
-                <span style={{ color: 'var(--text-muted)' }}>a</span>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={fechaFin}
-                  onChange={e => setFechaFin(e.target.value)}
-                />
-              </div>
+              <DateRangePicker desde={fechaInicio} hasta={fechaFin} onChange={(d, h) => { setFechaInicio(d); setFechaFin(h); }} />
             )}
 
             <button className="btn btn-secondary btn-sm" onClick={cargarAnalisis} title="Recargar datos">
